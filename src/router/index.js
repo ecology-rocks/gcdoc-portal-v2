@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import Login from '@/views/Login.vue'
-// We will create these components next
-import Dashboard from '@/modules/dashboard/Dashboard.vue'
-import MeetingView from '@/modules/admin/MeetingView.vue'
-import MemberList from '@/modules/members/MemberList.vue'
-import LogManager from '@/modules/logs/LogManager.vue'
+
+// --- EXISTING COMPONENTS ---
+import LogManager from '@/modules/memberlogs/LogManager.vue'
 import CsvImporter from '@/utils/CsvImporter.vue'
+import MeetingView from '@/modules/admin/MeetingView.vue' 
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -17,14 +17,34 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/dashboard', // Redirect root to dashboard
+      redirect: '/dashboard',
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: 'dashboard', name: 'dashboard', component: LogManager }, // Using LogManager as dashboard for now
-        { path: 'meeting', name: 'meeting', component: MeetingView },
-        { path: 'logs', name: 'logs', component: LogManager },
-        { path: 'import', name: 'import', component: CsvImporter },
+        // Dashboard currently uses LogManager as the default view
+        { 
+          path: 'dashboard', 
+          name: 'dashboard', 
+          component: LogManager 
+        },
+        // Log Manager
+        { 
+          path: 'logs', 
+          name: 'logs', 
+          component: LogManager 
+        },
+        // Meeting Prep (Commented out until file exists to prevent build error)
+        { 
+          path: 'meeting', 
+          name: 'meeting', 
+          component: MeetingView 
+        },
+        // Importer
+        { 
+          path: 'import', 
+          name: 'import', 
+          component: CsvImporter 
+        },
       ]
     }
   ]
