@@ -40,6 +40,9 @@
         <RouterLink to="/logs" active-class="bg-slate-800 text-white border-l-4 border-indigo-500" class="flex items-center px-4 py-2 rounded-r-lg transition-colors hover:bg-slate-800 hover:text-white group text-sm">
           <span class="mr-3">📝</span> Logs & Sheets
         </RouterLink>
+        <RouterLink to="/members" active-class="bg-slate-800 text-white border-l-4 border-indigo-500" class="flex items-center px-4 py-2 rounded-r-lg transition-colors hover:bg-slate-800 hover:text-white group text-sm">
+  <span class="mr-3">👥</span> Members
+</RouterLink>
 
         </nav>
 

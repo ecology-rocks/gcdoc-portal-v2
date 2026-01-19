@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { db } from '@/firebase'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore'
 
 export const useMembersStore = defineStore('members', {
   state: () => ({
@@ -9,36 +9,58 @@ export const useMembersStore = defineStore('members', {
   }),
 
   getters: {
-    // Helpers to make the UI cleaner
     getMemberByEmail: (state) => (email) => {
-      return state.members.find(m => m.Email?.toLowerCase() === email?.toLowerCase())
+      if (!email) return null
+      return state.members.find(m => m.id.toLowerCase() === email.toLowerCase())
     },
-
-    // For the Board Meeting: Applicants only
+    
+    // FIXED: Filter by MembershipType = 'Applicant' (case-insensitive)
     applicants: (state) => {
-      return state.members
-        .filter(m => m.MembershipType === 'Applicant')
-        .sort((a, b) => a.LastName.localeCompare(b.LastName))
+      return state.members.filter(m => 
+        m.MembershipType?.toLowerCase() === 'applicant'
+      )
     },
-
-    // For the Sign-In Sheet: Active Members (excluding applicants)
-    activeMembers: (state) => {
-      return state.members
-        .filter(m => m.isActive === true && m.MembershipType !== 'Applicant')
-        .sort((a, b) => a.LastName.localeCompare(b.LastName))
+    
+    // Filter for Voting Members (Regular or Lifetime)
+    votingMembers: (state) => {
+      return state.members.filter(m => 
+        ['Regular', 'Lifetime'].includes(m.MembershipType) && 
+        m.Role !== 'inactive'
+      )
     }
   },
 
   actions: {
-    initMembers() {
+    async initMembers() {
+      if (this.members.length > 0) return 
       this.loading = true
       onSnapshot(collection(db, 'members'), (snapshot) => {
-        this.members = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }))
+        this.members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
         this.loading = false
       })
-    }
-  }
-})
+    },
+
+    async addMember(data) {
+      if (!data.Email) throw new Error("Email is required.")
+      const emailId = data.Email.trim().toLowerCase()
+      const docRef = doc(db, 'members', emailId)
+
+      const existing = await getDoc(docRef)
+      if (existing.exists()) throw new Error(`Member ${data.Email} already exists.`)
+
+      await setDoc(docRef, {
+        ...data,
+        Email: emailId,
+        createdAt: new Date(),
+        Role: data.Role || 'member'
+      })
+    },
+
+    async updateMember(emailId, data) {
+      const docRef = doc(db, 'members', emailId)
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: new Date()
+      })
+    },
+}})

@@ -1,212 +1,144 @@
 <template>
-  <div class="max-w-5xl mx-auto">
-    <div class="flex justify-between items-end mb-6 print:hidden">
+  <div class="max-w-6xl mx-auto space-y-6">
+    
+    <div class="flex justify-between items-end border-b pb-4">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900">Meeting Attendance</h1>
-        <p class="text-gray-500 text-sm mt-1">
-          Fiscal Year: {{ fiscalYearStart.toLocaleDateString() }} - {{ fiscalYearEnd.toLocaleDateString() }}
-        </p>
+        <h1 class="text-3xl font-bold text-gray-900">Meeting Prep</h1>
+        <p class="text-gray-500">Overview for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} General Meeting</p>
       </div>
-      <div class="flex space-x-3">
-        <button @click="activeTab = 'applicants'" 
-          :class="activeTab === 'applicants' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border'"
-          class="px-4 py-2 rounded-md font-medium text-sm transition shadow-sm">
-          Applicants
-        </button>
-        <button @click="activeTab = 'signin'" 
-          :class="activeTab === 'signin' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 border'"
-          class="px-4 py-2 rounded-md font-medium text-sm transition shadow-sm">
-          Sign-In Sheet
-        </button>
-        <button @click="print" class="bg-gray-800 text-white px-4 py-2 rounded-md text-sm hover:bg-gray-700 flex items-center">
-          🖨️ Print PDF
-        </button>
+      <div class="text-right">
+        <div class="text-3xl font-black text-indigo-600">{{ membersStore.votingMembers.length }}</div>
+        <div class="text-xs font-bold text-gray-400 uppercase">Voting Members</div>
       </div>
     </div>
 
-    <div v-if="activeTab === 'applicants'" class="bg-white shadow rounded-lg overflow-hidden print:hidden">
-      <div class="px-6 py-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-        <h3 class="font-semibold text-gray-800">Applicant Voting Eligibility</h3>
-        <span class="text-xs font-mono text-gray-500">Threshold: 10 Hours</span>
-      </div>
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Member</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hours</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="m in sortedApplicants" :key="m.id" class="hover:bg-gray-50 transition" :class="getHours(m.Email) >= 10 ? 'bg-green-50/50' : ''">
-            <td class="px-6 py-4 text-sm font-medium text-gray-900">
-              {{ formatName(m) }}
-              <div v-if="m.Breeds" class="text-xs text-gray-400 font-normal mt-0.5">{{ m.Breeds }}</div>
-            </td>
-            
-            <td class="px-6 py-4 text-sm text-gray-500">
-              <div 
-                @click="copyEmail(m.Email)" 
-                class="flex items-center space-x-2 cursor-pointer group w-fit"
-                title="Click to copy"
-              >
-                <span class="group-hover:text-indigo-600 transition-colors">{{ m.Email }}</span>
-                
-                <span v-if="lastCopied === m.Email" class="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">Copied!</span>
-                <span v-else class="opacity-0 group-hover:opacity-100 text-gray-400 text-xs">📋</span>
-              </div>
-            </td>
-
-            <td class="px-6 py-4 text-sm text-gray-500 font-mono">
-              <span :class="getHours(m.Email) >= 10 ? 'text-green-700 font-bold' : ''">
-                {{ getHours(m.Email) }}
-              </span>
-            </td>
-            <td class="px-6 py-4">
-              <span v-if="getHours(m.Email) >= 10" class="px-2 py-1 text-xs font-bold bg-green-100 text-green-800 rounded-full">Eligible</span>
-              <span v-else class="px-2 py-1 text-xs font-bold bg-yellow-100 text-yellow-800 rounded-full">Pending</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div v-else class="bg-white shadow rounded-lg p-8 print:p-0 print:shadow-none">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       
-      <div id="print-area">
-        
-        <div class="mb-6 border-b-2 border-black pb-4">
-          <div class="flex justify-between items-end">
-            <h1 class="text-2xl font-bold uppercase tracking-wide">Membership Meeting Attendance</h1>
-            <span class="text-sm text-gray-600">Generated: {{ new Date().toLocaleDateString() }}</span>
-          </div>
+      <div class="bg-white p-6 rounded-lg shadow border-l-4 border-indigo-500">
+        <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Quorum Required (20%)</h3>
+        <div class="flex items-baseline gap-2">
+          <span class="text-4xl font-bold text-gray-800">{{ quorum }}</span>
+          <span class="text-sm text-gray-500">members present</span>
         </div>
+      </div>
 
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="border-b-2 border-black">
-              <th class="py-2 w-12 font-bold text-sm uppercase">LT</th>
-              <th class="py-2 font-bold text-sm uppercase">Member Name</th>
-              <th class="py-2 w-32 font-bold text-sm uppercase">Type</th>
-              <th class="py-2 w-32 font-bold text-sm uppercase text-center">
-                Hours To Date<br>
-                <span class="text-xs font-normal">(10/1 to 9/30)</span>
-              </th>
-              <th class="py-2 w-20 font-bold text-sm uppercase text-center">Present</th>
+      <div class="bg-white p-6 rounded-lg shadow border-l-4 border-green-500">
+        <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Pending Applicants</h3>
+        <div class="flex items-baseline gap-2">
+          <span class="text-4xl font-bold text-gray-800">{{ membersStore.applicants.length }}</span>
+          <span class="text-sm text-gray-500">to vote in</span>
+        </div>
+      </div>
+
+      <div class="bg-white p-6 rounded-lg shadow border-l-4 border-purple-500">
+        <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Monthly Activity</h3>
+        <div class="flex items-baseline gap-2">
+          <span class="text-4xl font-bold text-gray-800">{{ totalHoursMonth }}</span>
+          <span class="text-sm text-gray-500">hours logged</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="p-4 bg-gray-50 border-b flex justify-between items-center">
+          <h3 class="font-bold text-gray-800">📋 Applicant List</h3>
+          <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-medium">Pending Vote</span>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Breeds</th>
+              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
             </tr>
           </thead>
-          <tbody>
-            <tr v-for="m in activeMembers" :key="m.id" class="border-b border-gray-300">
-              <td class="py-3 text-center font-bold">
-                <span v-if="m.MembershipType === 'Lifetime'">LT</span>
+          <tbody class="divide-y divide-gray-200">
+            <tr v-if="membersStore.applicants.length === 0">
+              <td colspan="3" class="p-4 text-center text-gray-500 text-sm italic">No pending applicants.</td>
+            </tr>
+            <tr v-for="member in membersStore.applicants" :key="member.id">
+              <td class="px-4 py-3">
+                <div class="font-bold text-gray-900">{{ member.LastName }}, {{ member.FirstName }}</div>
+                <div class="text-xs text-gray-500">{{ member.Email }}</div>
               </td>
-              
-              <td class="py-3 font-semibold text-lg">
-                {{ formatName(m) }}
+              <td class="px-4 py-3 text-sm text-gray-600">
+                {{ member.Breeds || 'N/A' }}
               </td>
-              
-              <td class="py-3 text-sm">
-                {{ m.MembershipType }}
-              </td>
-              
-              <td class="py-3 text-center font-mono text-base">
-                {{ getHours(m.Email) }}
-              </td>
-              
-              <td class="py-3 text-center">
-                <div class="inline-block w-6 h-6 border-2 border-black rounded-sm"></div>
+              <td class="px-4 py-3 text-sm font-mono text-gray-500">
+                {{ member.Joined }}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="p-4 bg-gray-50 border-b">
+          <h3 class="font-bold text-gray-800">📊 Recent Activity</h3>
+        </div>
+        <div class="p-4">
+           <div v-if="loadingLogs" class="text-center py-4 text-gray-500">Loading stats...</div>
+           <div v-else class="space-y-4">
+             <div v-for="(count, type) in logBreakdown" :key="type" class="flex items-center">
+               <div class="w-48 text-sm font-medium text-gray-600 truncate" :title="type">{{ type }}</div>
+               <div class="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden mx-2">
+                 <div class="h-full bg-indigo-500" :style="{ width: `${(count / totalHoursMonth) * 100}%` }"></div>
+               </div>
+               <div class="w-12 text-right text-sm font-bold text-gray-900">{{ count }}h</div>
+             </div>
+           </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 
 const membersStore = useMembersStore()
 const logsStore = useLogsStore()
-const activeTab = ref('applicants')
-const lastCopied = ref(null)
 
-// Fiscal Year Logic (Oct 1 - Sept 30)
-const fiscalYearStart = new Date('2025-10-01')
-const fiscalYearEnd = new Date('2026-09-30')
+const loadingLogs = ref(false)
 
-onMounted(() => {
-  membersStore.initMembers()
-  logsStore.initLogs()
+onMounted(async () => {
+  await membersStore.initMembers()
+  loadingLogs.value = true
+  await logsStore.initLogs()
+  loadingLogs.value = false
 })
 
-// 1. Helper Function (Defined first so computed props can use it)
-const getHours = (email) => {
-  if (!email) return 0
-  
-  // Filter logs for this specific member AND the fiscal year
-  const memberLogs = logsStore.logs.filter(log => {
-    if (log.MemberEmail?.toLowerCase() !== email.toLowerCase()) return false
-    
-    if (!log.Date) return false
-    const logDate = log.Date.toDate ? log.Date.toDate() : new Date(log.Date)
-    return logDate >= fiscalYearStart
-  })
+// Quorum Calculation (20% of voting members)
+const quorum = computed(() => {
+  return Math.ceil(membersStore.votingMembers.length * 0.2)
+})
 
-  // Sum hours
-  const total = memberLogs.reduce((sum, log) => sum + (Number(log.Hours) || 0), 0)
-  return total % 1 === 0 ? total : total.toFixed(2)
-}
-
-// 2. Computed Sort for Applicants (Eligible First)
-const sortedApplicants = computed(() => {
-  // Create a shallow copy of the array from the store
-  const list = [...membersStore.applicants]
-
-  return list.sort((a, b) => {
-    const hoursA = parseFloat(getHours(a.Email))
-    const hoursB = parseFloat(getHours(b.Email))
-    
-    const isEligibleA = hoursA >= 10
-    const isEligibleB = hoursB >= 10
-
-    // Priority 1: Eligibility (True comes before False)
-    if (isEligibleA && !isEligibleB) return -1
-    if (!isEligibleA && isEligibleB) return 1
-    
-    // Priority 2: Last Name (Alphabetical)
-    return a.LastName.localeCompare(b.LastName)
+// Log Stats for Current Month
+const currentMonthLogs = computed(() => {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  return logsStore.logs.filter(l => {
+    const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
+    return d >= start
   })
 })
 
-const activeMembers = computed(() => {
-    return membersStore.members
-      .filter(m => m.MembershipType !== 'Applicant' && m.MembershipType !== 'Inactive')
-      .sort((a, b) => a.LastName.localeCompare(b.LastName))
+const totalHoursMonth = computed(() => {
+  return currentMonthLogs.value.reduce((acc, l) => acc + (Number(l.Hours) || 0), 0).toFixed(1)
 })
 
-const formatName = (m) => {
-  let name = `${m.LastName}, ${m.FirstName}`
-  if (m.FirstName2) {
-    name += ` & ${m.FirstName2}`
-  }
-  return name
-}
-
-const copyEmail = async (email) => {
-  if(!email) return
-  try {
-    await navigator.clipboard.writeText(email)
-    lastCopied.value = email
-    setTimeout(() => lastCopied.value = null, 2000)
-  } catch (err) {
-    console.error('Failed to copy', err)
-  }
-}
-
-const print = () => window.print()
+const logBreakdown = computed(() => {
+  const breakdown = {}
+  currentMonthLogs.value.forEach(l => {
+    // Handle blank types by defaulting to Standard
+    const type = (l.type && l.type !== '') ? l.type : 'Standard / Regular (1x)'
+    breakdown[type] = (breakdown[type] || 0) + (Number(l.Hours) || 0)
+  })
+  return breakdown
+})
 </script>
