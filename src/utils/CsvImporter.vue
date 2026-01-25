@@ -24,6 +24,26 @@
           <span>📥</span> Import {{ activeTab }}
         </h2>
         
+        <div class="mb-4 text-xs text-gray-500 bg-gray-50 p-3 rounded font-mono">
+          <p class="font-bold mb-1 text-gray-700">Expected Columns:</p>
+          
+          <div v-if="activeTab === 'members'">
+            Email, FirstName, LastName, Role, Phone1, Address...
+          </div>
+          
+          <div v-if="activeTab === 'logs'">
+            MemberEmail, Date, Hours, Activity, isMaintenance...
+          </div>
+          
+          <div v-if="activeTab === 'dogs'">
+            Name, OwnerEmail, Breed, Sex (M/F), Birthdate (YYYY-MM-DD), Neutered (Yes/No)
+          </div>
+          
+          <div v-if="activeTab === 'classes'">
+            Name, Year, Session, Day, Time, Location, Teachers (emails), Students (emails)
+          </div>
+        </div>
+
         <input 
           type="file" 
           accept=".csv" 
@@ -49,6 +69,9 @@
         <h2 class="font-bold text-lg mb-4 flex items-center gap-2 capitalize">
           <span>📤</span> Export {{ activeTab }}
         </h2>
+        <p class="text-sm text-gray-500 mb-6">
+          Download a full CSV of all {{ activeTab }} currently in the database.
+        </p>
         <button 
           @click="processExport" 
           :disabled="uploading"
@@ -96,7 +119,6 @@ watch(activeTab, () => {
   errorLog.value = []
 })
 
-// 1. Generic CSV Parser
 const parseCsv = (event) => {
   const file = event.target.files[0]
   if (!file) return
@@ -118,12 +140,11 @@ const parseCsv = (event) => {
   })
 }
 
-// 2. Generic Import Handler
 const processImport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]
   
-  // Chunking for Firestore Batch Limits (500 ops max)
+  // Chunking for Firestore
   const chunkSize = 400 
   const chunks = []
   for (let i = 0; i < parsedData.value.length; i += chunkSize) {
@@ -131,11 +152,18 @@ const processImport = async () => {
   }
 
   try {
+    let total = 0
     for (const chunk of chunks) {
-      await currentStore.importGenericRows(chunk)
+      const count = await currentStore.importGenericRows(chunk)
+      total += count
     }
-    alert(`${activeTab.value} Import Complete!`)
-    parsedData.value = [] // clear on success
+    alert(`${activeTab.value} Import Complete! Imported ${total} records.`)
+    parsedData.value = []
+    
+    // Refresh the store view if applicable
+    if (currentStore.initClasses) await currentStore.initClasses()
+    if (currentStore.initMembers) await currentStore.initMembers()
+    
   } catch (e) {
     console.error(e)
     errorLog.value.push(e.message)
@@ -143,7 +171,6 @@ const processImport = async () => {
   uploading.value = false
 }
 
-// 3. Generic Export Handler
 const processExport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]

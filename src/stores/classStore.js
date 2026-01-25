@@ -122,12 +122,12 @@ export const useClassStore = defineStore('classes', {
           batch.set(newDocRef, {
             id: newDocRef.id,
             name: row['Name'],
+            
+            // [UPDATED] New Fields
             session: row['Session'] || '',
             year: parseInt(row['Year']) || new Date().getFullYear(),
-            
-            // [UPDATED] Import separate fields
             day: row['Day'] || 'Monday',
-            time: row['Time'] || '',
+            time: row['Time'] || '', // Expects HH:mm format usually
             
             location: row['Location'] || '',
             teachers: teacherEmails,
@@ -145,9 +145,10 @@ export const useClassStore = defineStore('classes', {
       await this.initClasses()
       return this.classes.map(d => ({
         Name: d.name,
-        Session: d.session,
+        // [UPDATED] New Fields
         Year: d.year,
-        Day: d.day, // [NEW]
+        Session: d.session,
+        Day: d.day,
         Time: d.time,
         Location: d.location,
         Teachers: (d.teachers || []).join(', '),
