@@ -1,65 +1,61 @@
 <template>
-  <div class="p-6 max-w-4xl mx-auto">
+  <div class="p-6 max-w-6xl mx-auto">
     <div class="mb-8">
-      <h1 class="text-2xl font-bold text-gray-800">Data Importer</h1>
-      <p class="text-gray-500">Bulk upload Members or Logs from CSV.</p>
+      <h1 class="text-2xl font-bold text-gray-800">Data Tools</h1>
+      <p class="text-gray-500">Import and Export club data via CSV.</p>
+    </div>
+
+    <div class="flex space-x-2 border-b border-gray-200 mb-6">
+      <button 
+        v-for="tab in tabs" 
+        :key="tab"
+        @click="activeTab = tab"
+        class="px-4 py-2 text-sm font-medium capitalize transition-colors"
+        :class="activeTab === tab ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
+      >
+        {{ tab }}
+      </button>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
       
       <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
-        <h2 class="font-bold text-lg mb-4 flex items-center gap-2">
-          <span>👥</span> Import Members
+        <h2 class="font-bold text-lg mb-4 flex items-center gap-2 capitalize">
+          <span>📥</span> Import {{ activeTab }}
         </h2>
+        
         <input 
           type="file" 
           accept=".csv" 
-          @change="(e) => parseCsv(e, 'members')"
+          @change="parseCsv"
           class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
         >
-        <div v-if="importType === 'members'" class="mt-4">
-          <div v-if="parsing" class="text-sm text-gray-500">Parsing CSV...</div>
-          <div v-if="parsedData.length > 0" class="space-y-3">
-            <p class="text-sm font-bold text-green-600">{{ parsedData.length }} members found.</p>
-            <button 
-              @click="uploadMembers" 
-              :disabled="uploading"
-              class="w-full bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {{ uploading ? `Uploading... (${progress}%)` : 'Start Import' }}
-            </button>
-          </div>
+        
+        <div v-if="parsedData.length > 0" class="mt-4 space-y-3">
+          <p class="text-sm font-bold text-green-600">
+            {{ parsedData.length }} records ready.
+          </p>
+          <button 
+            @click="processImport" 
+            :disabled="uploading"
+            class="w-full bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {{ uploading ? `Processing...` : 'Start Import' }}
+          </button>
         </div>
       </div>
 
       <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
-        <h2 class="font-bold text-lg mb-4 flex items-center gap-2">
-          <span>📝</span> Import Logs
+        <h2 class="font-bold text-lg mb-4 flex items-center gap-2 capitalize">
+          <span>📤</span> Export {{ activeTab }}
         </h2>
-        <input 
-          type="file" 
-          accept=".csv" 
-          @change="(e) => parseCsv(e, 'logs')"
-          class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+        <button 
+          @click="processExport" 
+          :disabled="uploading"
+          class="w-full border border-indigo-600 text-indigo-600 py-2 rounded font-bold hover:bg-indigo-50 disabled:opacity-50 transition-colors"
         >
-        <div v-if="importType === 'logs'" class="mt-4">
-          <div v-if="parsing" class="text-sm text-gray-500">Parsing CSV...</div>
-          <div v-if="parsedData.length > 0" class="space-y-3">
-            <p class="text-sm font-bold text-green-600">{{ parsedData.length }} logs found.</p>
-            
-            <div class="bg-yellow-50 p-2 text-xs text-yellow-800 border border-yellow-200 rounded">
-              <strong>Note:</strong> Preserves all fields: clockHours, isMaintenance, Status, etc.
-            </div>
-
-            <button 
-              @click="uploadLogs" 
-              :disabled="uploading"
-              class="w-full bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {{ uploading ? `Uploading... (${progress}%)` : 'Start Import' }}
-            </button>
-          </div>
-        </div>
+          Download CSV
+        </button>
       </div>
     </div>
 
@@ -73,28 +69,40 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import Papa from 'papaparse'
-import { db } from '@/firebase'
-import { collection, writeBatch, doc, Timestamp } from 'firebase/firestore'
+import { useMembersStore } from '@/stores/membersStore'
+import { useLogsStore } from '@/stores/logsStore'
+import { useDogStore } from '@/stores/dogStore'
+import { useClassStore } from '@/stores/classStore'
 
+const tabs = ['members', 'logs', 'dogs', 'classes']
+const activeTab = ref('members')
 const parsing = ref(false)
 const uploading = ref(false)
-const importType = ref(null) // 'members' or 'logs'
 const parsedData = ref([])
-const progress = ref(0)
 const errorLog = ref([])
 
-// 1. CSV PARSER
-const parseCsv = (event, type) => {
-  const file = event.target.files[0]
-  if (!file) return
+// Stores
+const stores = {
+  members: useMembersStore(),
+  logs: useLogsStore(),
+  dogs: useDogStore(),
+  classes: useClassStore()
+}
 
-  parsing.value = true
-  importType.value = type
+watch(activeTab, () => {
   parsedData.value = []
   errorLog.value = []
-  progress.value = 0
+})
+
+// 1. Generic CSV Parser
+const parseCsv = (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+  parsing.value = true
+  parsedData.value = []
+  errorLog.value = []
 
   Papa.parse(file, {
     header: true,
@@ -102,7 +110,6 @@ const parseCsv = (event, type) => {
     complete: (results) => {
       parsedData.value = results.data
       parsing.value = false
-      console.log(`Parsed ${results.data.length} rows for ${type}`)
     },
     error: (err) => {
       errorLog.value.push("CSV Parse Error: " + err.message)
@@ -111,120 +118,57 @@ const parseCsv = (event, type) => {
   })
 }
 
-// 2. HELPER: CHUNK ARRAY (Firebase Limit 500)
-const chunkArray = (arr, size) => {
+// 2. Generic Import Handler
+const processImport = async () => {
+  uploading.value = true
+  const currentStore = stores[activeTab.value]
+  
+  // Chunking for Firestore Batch Limits (500 ops max)
+  const chunkSize = 400 
   const chunks = []
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size))
+  for (let i = 0; i < parsedData.value.length; i += chunkSize) {
+    chunks.push(parsedData.value.slice(i, i + chunkSize))
   }
-  return chunks
-}
 
-// 3. UPLOAD MEMBERS
-const uploadMembers = async () => {
-  uploading.value = true
-  const chunks = chunkArray(parsedData.value, 400)
-  let processed = 0
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db)
-    
-    chunk.forEach(row => {
-      const email = row['Email']?.trim() || row['email']?.trim()
-      
-      if (email) {
-        const docRef = doc(db, 'members', email.toLowerCase())
-        batch.set(docRef, {
-          FirstName: row['First Name'] || row['FirstName'] || '',
-          LastName: row['Last Name'] || row['LastName'] || '',
-          Email: email,
-          Phone: row['Phone'] || '',
-          Role: row['Role'] || 'member', 
-          legacyId: row['ID'] || null
-        }, { merge: true }) 
-      }
-    })
-
-    try {
-      await batch.commit()
-      processed += chunk.length
-      progress.value = Math.round((processed / parsedData.value.length) * 100)
-    } catch (e) {
-      console.error(e)
-      errorLog.value.push(`Batch Failed: ${e.message}`)
+  try {
+    for (const chunk of chunks) {
+      await currentStore.importGenericRows(chunk)
     }
+    alert(`${activeTab.value} Import Complete!`)
+    parsedData.value = [] // clear on success
+  } catch (e) {
+    console.error(e)
+    errorLog.value.push(e.message)
   }
   uploading.value = false
-  if (errorLog.value.length === 0) alert('Members Import Complete!')
 }
 
-// 4. UPLOAD LOGS (FULL FIDELITY)
-const uploadLogs = async () => {
+// 3. Generic Export Handler
+const processExport = async () => {
   uploading.value = true
-  const chunks = chunkArray(parsedData.value, 400)
-  let processed = 0
-
-  for (const chunk of chunks) {
-    const batch = writeBatch(db)
-    
-    chunk.forEach(row => {
-      // 1. Key Fields
-      const email = row['MemberEmail'] || row['Email']
-      const hours = parseFloat(row['Hours']) || 0
-      
-      // 2. Date Conversion
-      let dateObj = new Date()
-      if (row['Date']) {
-        dateObj = new Date(row['Date'])
-      }
-
-      // 3. Boolean/Number Conversions
-      const clockHours = parseFloat(row['clockHours']) || hours // Fallback to 'Hours' if clockHours is blank
-      
-      // Handle 'TRUE' string from CSV
-      let isMaint = false
-      if (row['isMaintenance']) {
-        const val = row['isMaintenance'].toString().toUpperCase()
-        isMaint = val === 'TRUE'
-      }
-
-      if (email) {
-        const newLogRef = doc(collection(db, 'logs'))
-        batch.set(newLogRef, {
-          // IDs
-          MemberEmail: email,
-          MemberName: row['MemberName'] || '', // Store Name too
-          
-          // Time
-          Date: Timestamp.fromDate(dateObj),
-          Hours: hours,        // Credited Hours (Multiplied)
-          clockHours: clockHours, // Actual Clock Hours (Base)
-          
-          // Activity & Type
-          Activity: row['Activity'] || '',
-          type: row['type'] || '', // Keep blank if blank
-          isMaintenance: isMaint,
-          
-          // Metadata
-          SourceSheet: row['SourceSheet'] || 'legacy_csv',
-          Status: row['Status'] || 'approved',
-          FiscalYearRollover: row['FiscalYearRollover'] || 'No',
-          
-          importedAt: Timestamp.now()
-        })
-      }
-    })
-
-    try {
-      await batch.commit()
-      processed += chunk.length
-      progress.value = Math.round((processed / parsedData.value.length) * 100)
-    } catch (e) {
-      console.error(e)
-      errorLog.value.push(`Batch Failed: ${e.message}`)
+  const currentStore = stores[activeTab.value]
+  
+  try {
+    const data = await currentStore.getExportData()
+    if (!data || data.length === 0) {
+      alert("No data to export.")
+      uploading.value = false
+      return
     }
+
+    const csv = Papa.unparse(data)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `${activeTab.value}_export.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (e) {
+    console.error(e)
+    errorLog.value.push("Export Failed: " + e.message)
   }
   uploading.value = false
-  if (errorLog.value.length === 0) alert('Logs Import Complete!')
 }
 </script>

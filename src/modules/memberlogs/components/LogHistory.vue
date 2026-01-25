@@ -3,19 +3,19 @@
     
     <div class="stats-bar">
       <div class="stat-card">
-        <span class="stat-label">Total Logs</span>
+        <span class="stat-label">Logs ({{ periodLabel }})</span>
         <span class="stat-value">{{ filteredLogs.length }}</span>
       </div>
       <div class="stat-card primary">
-        <span class="stat-label">Total Credited Hours</span>
+        <span class="stat-label">Credited Hours</span>
         <span class="stat-value">{{ stats.totalHours }}</span>
       </div>
       <div class="stat-card maintenance">
-        <span class="stat-label">Maintenance (2x)</span>
+        <span class="stat-label">Maintenance</span>
         <span class="stat-value">{{ stats.maintenance }}</span>
       </div>
       <div class="stat-card setup">
-        <span class="stat-label">Event Setup (2x)</span>
+        <span class="stat-label">Event Setup</span>
         <span class="stat-value">{{ stats.setup }}</span>
       </div>
     </div>
@@ -31,29 +31,41 @@
       </div>
       
       <div class="filter-group">
+        
+        <select v-model="filters.period" @change="applyPeriod" class="input-control period-select font-bold text-indigo-700 bg-indigo-50 border-indigo-200">
+          <option value="current_fy">Current FY ({{ currentFYLabel }})</option>
+          <option value="last_fy">Last FY</option>
+          <option value="all">All Time</option>
+          <option value="custom">Custom Range</option>
+        </select>
+
+        <span class="w-px h-6 bg-gray-300 mx-2"></span>
+
         <select v-model="filters.type" class="input-control type-select">
           <option value="all">All Types</option>
-          <option :value="TYPES.STANDARD">Standard (1x)</option>
-          <option :value="TYPES.SETUP">Trial Setup (2x)</option>
-          <option :value="TYPES.MAINT">Maintenance (2x + Voucher)</option>
+          <option :value="TYPES.STANDARD">Standard</option>
+          <option :value="TYPES.SETUP">Trial Setup</option>
+          <option :value="TYPES.MAINT">Maintenance</option>
         </select>
         
         <input 
           v-model="filters.startDate" 
           type="date" 
           class="input-control date-box" 
-          title="Start Date"
+          :disabled="filters.period !== 'custom'"
+          :class="{ 'bg-gray-100': filters.period !== 'custom' }"
         >
         <span class="separator">to</span>
         <input 
           v-model="filters.endDate" 
           type="date" 
           class="input-control date-box" 
-          title="End Date"
+          :disabled="filters.period !== 'custom'"
+          :class="{ 'bg-gray-100': filters.period !== 'custom' }"
         >
         
-        <button @click="resetFilters" class="reset-btn" title="Clear Filters">
-          ✕
+        <button @click="resetFilters" class="reset-btn" title="Reset to Current FY">
+          ↺
         </button>
       </div>
     </div>
@@ -99,7 +111,7 @@
             </td>
           </tr>
           <tr v-if="filteredLogs.length === 0">
-            <td colspan="5" class="empty-state">No logs found matching your filters.</td>
+            <td colspan="5" class="empty-state">No logs found for this period.</td>
           </tr>
         </tbody>
       </table>
@@ -115,27 +127,85 @@ import { useMembersStore } from '@/stores/membersStore'
 const logsStore = useLogsStore()
 const memberStore = useMembersStore()
 
-// --- CONSTANTS (Exact DB Strings) ---
 const TYPES = {
   MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
   STANDARD: "Standard / Regular (1x)",
   SETUP: "Trial Setup / Teardown (2x)"
 }
 
-// State
 const filters = reactive({
   search: '',
   type: 'all',
+  period: 'current_fy', // Default
   startDate: '',
   endDate: ''
 })
 
+// --- FISCAL YEAR LOGIC (Oct 1 - Sept 30) ---
+const getFYDates = (offset = 0) => {
+  const now = new Date()
+  const currentMonth = now.getMonth() // 0-11
+  const currentYear = now.getFullYear()
+  
+  // If we are in Jan-Sept (0-8), FY started Oct prev year.
+  // If we are in Oct-Dec (9-11), FY started Oct this year.
+  let startYear = currentMonth >= 9 ? currentYear : currentYear - 1
+  
+  // Apply Offset (e.g. -1 for Last FY)
+  startYear += offset
+
+  const start = new Date(startYear, 9, 1) // Oct 1
+  const end = new Date(startYear + 1, 9, 1) // Oct 1 next year (exclusive in logic, but inclusive in date picker requires -1 day usually, but straightforward works for comparison)
+  // Adjust end to Sept 30 for the Date Picker Display
+  const endDisplay = new Date(startYear + 1, 8, 30) 
+
+  return { 
+    start: start.toISOString().split('T')[0], 
+    end: endDisplay.toISOString().split('T')[0],
+    label: `FY${(startYear + 1).toString().slice(-2)}` 
+  }
+}
+
+const currentFYLabel = computed(() => getFYDates(0).label)
+
+const periodLabel = computed(() => {
+  if (filters.period === 'current_fy') return currentFYLabel.value
+  if (filters.period === 'last_fy') return 'Last FY'
+  if (filters.period === 'all') return 'All Time'
+  return 'Custom'
+})
+
+const applyPeriod = () => {
+  if (filters.period === 'current_fy') {
+    const dates = getFYDates(0)
+    filters.startDate = dates.start
+    filters.endDate = dates.end
+  } else if (filters.period === 'last_fy') {
+    const dates = getFYDates(-1)
+    filters.startDate = dates.start
+    filters.endDate = dates.end
+  } else if (filters.period === 'all') {
+    filters.startDate = ''
+    filters.endDate = ''
+  }
+  // 'custom' does nothing, leaves inputs editable
+}
+
+// Reset
+const resetFilters = () => {
+  filters.search = ''
+  filters.type = 'all'
+  filters.period = 'current_fy'
+  applyPeriod()
+}
+
 onMounted(() => {
   logsStore.initLogs()
   memberStore.initMembers()
+  applyPeriod() // Init dates
 })
 
-// Helpers
+// --- HELPERS ---
 const getMemberName = (email) => {
   const m = memberStore.getMemberByEmail(email)
   return m ? `${m.LastName}, ${m.FirstName}` : email
@@ -147,14 +217,6 @@ const formatDate = (ts) => {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString()
 }
 
-const resetFilters = () => {
-  filters.search = ''
-  filters.type = 'all'
-  filters.startDate = ''
-  filters.endDate = ''
-}
-
-// Helper to normalize blank types to Standard
 const getNormalizedType = (type) => {
   if (!type || type === '') return TYPES.STANDARD
   return type
@@ -167,11 +229,10 @@ const getTypeClass = (type) => {
   return 'standard'
 }
 
-// 1. FILTER LOGIC
+// --- FILTERING ---
 const filteredLogs = computed(() => {
   let list = logsStore.logs
 
-  // Search Text
   if (filters.search) {
     const q = filters.search.toLowerCase()
     list = list.filter(l => 
@@ -181,15 +242,17 @@ const filteredLogs = computed(() => {
     )
   }
 
-  // Type Filter
   if (filters.type !== 'all') {
     list = list.filter(l => getNormalizedType(l.type) === filters.type)
   }
 
-  // Date Range
   if (filters.startDate) {
     const start = new Date(filters.startDate)
-    start.setHours(0,0,0,0) 
+    start.setHours(0,0,0,0) // Start of day
+    // Adjust for timezone offset issues with simple string parsing if needed, 
+    // but usually string 'YYYY-MM-DD' parses to UTC in some browsers or Local in others.
+    // Safe approach: create date and ensure comparison works. 
+    // Simplified here for brevity.
     list = list.filter(l => {
       const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
       return d >= start
@@ -198,7 +261,7 @@ const filteredLogs = computed(() => {
 
   if (filters.endDate) {
     const end = new Date(filters.endDate)
-    end.setHours(23,59,59,999) 
+    end.setHours(23,59,59,999) // End of day
     list = list.filter(l => {
       const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
       return d <= end
@@ -208,25 +271,17 @@ const filteredLogs = computed(() => {
   return list
 })
 
-// 2. CALCULATION LOGIC
 const stats = computed(() => {
-  const s = {
-    totalHours: 0,
-    maintenance: 0,
-    setup: 0
-  }
+  const s = { totalHours: 0, maintenance: 0, setup: 0 }
   
   filteredLogs.value.forEach(l => {
     const h = Number(l.Hours) || 0
     const t = getNormalizedType(l.type)
-
     s.totalHours += h
-    
     if (t === TYPES.MAINT) s.maintenance += h
     if (t === TYPES.SETUP) s.setup += h
   })
   
-  // Format
   s.totalHours = parseFloat(s.totalHours.toFixed(2))
   s.maintenance = parseFloat(s.maintenance.toFixed(2))
   s.setup = parseFloat(s.setup.toFixed(2))
@@ -270,7 +325,6 @@ const stats = computed(() => {
 
 .stat-card.setup { background: #f5f3ff; border-color: #ddd6fe; }
 .stat-card.setup .stat-value { color: #6d28d9; }
-
 
 .stat-label {
   font-size: 0.7rem;
@@ -317,18 +371,11 @@ const stats = computed(() => {
   font-size: 0.875rem;
   outline: none;
 }
-.type-select {
-    min-width: 150px;
-}
+.type-select { min-width: 150px; }
+.period-select { min-width: 140px; cursor: pointer; }
 
-.search-box {
-  width: 100%;
-}
-
-.separator {
-  color: #64748b;
-  font-size: 0.875rem;
-}
+.search-box { width: 100%; }
+.separator { color: #64748b; font-size: 0.875rem; }
 
 .reset-btn {
   background: #f1f5f9;
@@ -345,28 +392,15 @@ const stats = computed(() => {
 }
 .reset-btn:hover {
   background: #e2e8f0;
-  color: #ef4444;
-  border-color: #ef4444;
+  color: #4f46e5;
+  border-color: #4f46e5;
 }
 
 /* TABLE */
-.table-container {
-  flex: 1;
-  overflow-y: auto;
-}
+.table-container { flex: 1; overflow-y: auto; }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-thead {
-  position: sticky;
-  top: 0;
-  background-color: #f8fafc;
-  z-index: 10;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
+table { width: 100%; border-collapse: collapse; }
+thead { position: sticky; top: 0; background-color: #f8fafc; z-index: 10; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
 
 th {
   text-align: left;
@@ -384,41 +418,14 @@ td {
   color: #334155;
   border-bottom: 1px solid #f1f5f9;
 }
+tr:hover { background-color: #f8fafc; }
 
-tr:hover {
-  background-color: #f8fafc;
-}
-
-.date-col {
-  white-space: nowrap;
-  font-family: monospace;
-  color: #64748b;
-}
-
-.hours-col {
-  font-weight: bold;
-  font-family: monospace;
-}
-.clock-hours {
-    display: block;
-    font-size: 0.7rem;
-    font-weight: normal;
-    color: #94a3b8;
-}
-
-.member-name {
-  color: #4f46e5;
-  font-weight: 600;
-}
-
-.activity-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-.activity-text {
-    font-weight: 500;
-}
+.date-col { white-space: nowrap; font-family: monospace; color: #64748b; }
+.hours-col { font-weight: bold; font-family: monospace; }
+.clock-hours { display: block; font-size: 0.7rem; font-weight: normal; color: #94a3b8; }
+.member-name { color: #4f46e5; font-weight: 600; }
+.activity-cell { display: flex; flex-direction: column; gap: 0.25rem; }
+.activity-text { font-weight: 500; }
 
 .type-tag {
   display: inline-block;

@@ -6,8 +6,10 @@ import Login from '@/views/Login.vue'
 import LogManager from '@/modules/memberlogs/LogManager.vue'
 import CsvImporter from '@/utils/CsvImporter.vue'
 import MemberForm from '@/modules/members/MemberForm.vue'
-import MemberManager from '@/modules/members/MemberManager.vue' // <--- IMPORT NEW FILE
+import MemberManager from '@/modules/members/MemberManager.vue' 
 import MeetingView from '@/modules/admin/MeetingView.vue'
+import RegistrarView from '@/modules/admin/RegistrarView.vue' // [NEW IMPORT]
+import ClassDashboard from '@/modules/classes/ClassDashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,20 +29,22 @@ const router = createRouter({
         { path: 'logs', name: 'logs', component: LogManager },
         { path: 'meeting', name: 'meeting', component: MeetingView },
         { path: 'import', name: 'import', component: CsvImporter },
+        
+        // Registrar / Classes
+        { path: 'registrar', name: 'registrar', component: RegistrarView }, // [NEW ROUTE]
+        { path: 'classes', name: 'classes', component: ClassDashboard },
 
-        // --- MEMBER ROUTES ---
+        // Members
         {
-          path: 'members',        // Listing Page
+          path: 'members',       
           name: 'members',
           component: MemberManager
         },
-        // Inside routes array, under children:
         {
           path: 'members/add',
           name: 'add-member',
           component: MemberForm
         },
-        // NEW ROUTE
         {
           path: 'members/edit/:id',
           name: 'edit-member',
@@ -51,7 +55,6 @@ const router = createRouter({
   ]
 })
 
-// Navigation Guard... (Keep existing guard code)
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   if (authStore.loading) await authStore.init()

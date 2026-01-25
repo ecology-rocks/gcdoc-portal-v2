@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-3xl mx-auto py-8">
+  <div class="max-w-4xl mx-auto py-8 px-4">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold text-gray-900">
         {{ isEditMode ? 'Edit Member' : 'Add New Member' }}
@@ -9,7 +9,7 @@
 
     <div v-if="fetching" class="text-center py-12 text-gray-500">Loading member details...</div>
 
-    <form v-else @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow rounded-lg p-6 border border-gray-200">
+    <form v-else @submit.prevent="handleSubmit" class="space-y-6 bg-white shadow rounded-lg p-6 border border-gray-200 mb-8">
       
       <div>
         <h3 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3 border-b pb-1">Primary Member</h3>
@@ -152,6 +152,12 @@
       </div>
 
     </form>
+
+    <DogManager 
+      v-if="isEditMode" 
+      :owner-email="form.Email" 
+    />
+
   </div>
 </template>
 
@@ -159,6 +165,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMembersStore } from '@/stores/membersStore'
+import DogManager from './components/DogManager.vue' // [NEW IMPORT]
 
 const router = useRouter()
 const route = useRoute()
@@ -168,7 +175,7 @@ const submitting = ref(false)
 const fetching = ref(false)
 const isEditMode = computed(() => !!route.params.id)
 
-// Default empty form
+// Original Complex Form Data
 const form = ref({
   FirstName: '', LastName: '', Email: '',
   FirstName2: '', LastName2: '',
@@ -183,13 +190,10 @@ const form = ref({
 onMounted(async () => {
   if (isEditMode.value) {
     fetching.value = true
-    // Ensure store is loaded
     if (store.members.length === 0) await store.initMembers()
     
-    // Find member
     const member = store.getMemberByEmail(route.params.id)
     if (member) {
-      // Spread into form to populate fields
       form.value = { ...form.value, ...member }
     } else {
       alert('Member not found')
