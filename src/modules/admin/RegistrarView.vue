@@ -14,22 +14,32 @@
       </button>
     </div>
 
+    <div class="flex gap-4 items-center bg-gray-50 p-3 rounded border border-gray-200">
+      <span class="text-sm font-bold text-gray-500 uppercase">Filter:</span>
+      <select v-model="filterYear" class="border rounded px-2 py-1 text-sm bg-white">
+        <option :value="null">All Years</option>
+        <option v-for="y in classStore.availableYears" :key="y" :value="y">{{ y }}</option>
+      </select>
+    </div>
+
     <div v-if="classStore.loading" class="text-center py-8 text-gray-500">Loading classes...</div>
     
     <div v-else class="grid grid-cols-1 gap-4">
-      <div v-for="cls in classStore.classes" :key="cls.id" class="bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div v-for="cls in filteredClasses" :key="cls.id" class="bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         
         <div class="flex-1">
           <div class="flex items-center gap-2 mb-1">
             <h3 class="text-lg font-bold text-gray-900">{{ cls.name }}</h3>
-            <span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{{ cls.session }}</span>
+            <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold border border-indigo-200">
+              {{ cls.year }} • {{ cls.session }}
+            </span>
           </div>
           <div class="text-sm text-gray-500 space-x-4">
             <span>📍 {{ cls.location }}</span>
-            <span>⏰ {{ cls.time }}</span>
+            <span class="font-medium text-gray-700">⏰ {{ cls.day }}s @ {{ formatTime(cls.time) }}</span>
           </div>
           <div class="mt-2 text-xs text-gray-400">
-            <strong>Teachers:</strong> {{ cls.teachers?.join(', ') || 'None' }}
+            <strong>Teachers:</strong> {{ cls.teachers?.map(t => getMemberName(t)).join(', ') || 'None' }}
           </div>
         </div>
 
@@ -48,8 +58,8 @@
         </div>
       </div>
 
-      <div v-if="classStore.classes.length === 0" class="text-center py-10 text-gray-400 italic">
-        No classes found. Click "Add Class" to start.
+      <div v-if="filteredClasses.length === 0" class="text-center py-10 text-gray-400 italic">
+        No classes found for this filter.
       </div>
     </div>
 
@@ -62,53 +72,73 @@
         
         <div class="p-6 space-y-4">
           
-          <div class="grid grid-cols-2 gap-4">
-            <div>
+          <div class="grid grid-cols-12 gap-4">
+            <div class="col-span-12 sm:col-span-6">
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Class Name</label>
               <input v-model="form.name" type="text" class="w-full border rounded p-2" placeholder="e.g. Novice Barn Hunt">
             </div>
-            <div>
+            
+            <div class="col-span-6 sm:col-span-3">
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Year</label>
+              <select v-model="form.year" class="w-full border rounded p-2 bg-white">
+                <option v-for="y in classStore.availableYears" :key="y" :value="y">{{ y }}</option>
+              </select>
+            </div>
+
+            <div class="col-span-6 sm:col-span-3">
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Session</label>
-              <select v-model="form.session" class="w-full border rounded p-2">
+              <select v-model="form.session" class="w-full border rounded p-2 bg-white">
                 <option v-for="s in classStore.sessions" :key="s" :value="s">{{ s }}</option>
               </select>
             </div>
-            <div>
+
+            <div class="col-span-12">
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Location</label>
-              <select v-model="form.location" class="w-full border rounded p-2">
+              <select v-model="form.location" class="w-full border rounded p-2 bg-white">
                 <option v-for="l in classStore.locations" :key="l" :value="l">{{ l }}</option>
               </select>
             </div>
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Time</label>
-              <input v-model="form.time" type="text" class="w-full border rounded p-2" placeholder="e.g. Tuesdays 6pm">
+
+            <div class="col-span-6">
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Day of Week</label>
+              <select v-model="form.day" class="w-full border rounded p-2 bg-white">
+                <option v-for="d in classStore.days" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
+            <div class="col-span-6">
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Time (Start)</label>
+              <input v-model="form.time" type="time" class="w-full border rounded p-2">
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Teachers (Emails)</label>
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Teachers</label>
             <div class="flex gap-2 mb-2">
-              <input v-model="newTeacher" @keyup.enter="addTeacher" type="text" class="flex-1 border rounded p-2 text-sm" placeholder="Type email and press Enter">
-              <button @click="addTeacher" class="bg-gray-100 px-3 py-2 rounded border hover:bg-gray-200">Add</button>
+              <div class="flex-1">
+                <MemberSelect v-model="pendingTeacherEmail" />
+              </div>
+              <button @click="addTeacher" class="bg-gray-100 px-3 py-2 rounded border hover:bg-gray-200 h-[38px] mt-[1px]">Add</button>
             </div>
             <div class="flex flex-wrap gap-2">
               <span v-for="t in form.teachers" :key="t" class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-sm flex items-center gap-1">
-                {{ t }}
-                <button @click="removeTeacher(t)" class="text-indigo-400 hover:text-red-500 font-bold">×</button>
+                {{ getMemberName(t) }}
+                <button @click="removeTeacher(t)" class="text-indigo-400 hover:text-red-500 font-bold ml-1">×</button>
               </span>
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Students (Emails)</label>
+            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Students</label>
             <div class="flex gap-2 mb-2">
-              <input v-model="newStudent" @keyup.enter="addStudent" type="text" class="flex-1 border rounded p-2 text-sm" placeholder="Type email and press Enter">
-              <button @click="addStudent" class="bg-gray-100 px-3 py-2 rounded border hover:bg-gray-200">Add</button>
+              <div class="flex-1">
+                <MemberSelect v-model="pendingStudentEmail" />
+              </div>
+              <button @click="addStudent" class="bg-gray-100 px-3 py-2 rounded border hover:bg-gray-200 h-[38px] mt-[1px]">Add</button>
             </div>
             <div class="flex flex-wrap gap-2">
               <span v-for="s in form.students" :key="s.email" class="bg-green-50 text-green-700 px-2 py-1 rounded text-sm flex items-center gap-1">
-                {{ s.email }}
-                <button @click="removeStudent(s.email)" class="text-green-400 hover:text-red-500 font-bold">×</button>
+                {{ s.name }}
+                <button @click="removeStudent(s.email)" class="text-green-400 hover:text-red-500 font-bold ml-1">×</button>
               </span>
             </div>
           </div>
@@ -128,40 +158,61 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed } from 'vue'
 import { useClassStore } from '@/stores/classStore'
+import { useMembersStore } from '@/stores/membersStore'
+import MemberSelect from '@/components/admin/MemberSelect.vue'
 
 const classStore = useClassStore()
+const membersStore = useMembersStore()
+
 const showModal = ref(false)
 const isEditing = ref(false)
 const editingId = ref(null)
+const filterYear = ref(new Date().getFullYear())
 
-const newTeacher = ref('')
-const newStudent = ref('')
+const pendingTeacherEmail = ref('')
+const pendingStudentEmail = ref('')
 
 const form = reactive({
   name: '',
   session: '',
+  year: new Date().getFullYear(),
   location: '',
-  time: '',
+  day: 'Monday', // [NEW]
+  time: '',      // [NEW]
   teachers: [],
   students: []
 })
 
-onMounted(() => {
-  classStore.initClasses()
+onMounted(async () => {
+  await classStore.initClasses()
+  await membersStore.initMembers()
+})
+
+const filteredClasses = computed(() => {
+  let list = classStore.classes
+  if (filterYear.value) {
+    list = list.filter(c => c.year === filterYear.value)
+  }
+  return list.sort((a, b) => a.session.localeCompare(b.session))
 })
 
 // --- ACTIONS ---
 
 const openModal = (cls = null) => {
+  pendingTeacherEmail.value = ''
+  pendingStudentEmail.value = ''
+  
   if (cls) {
     isEditing.value = true
     editingId.value = cls.id
     form.name = cls.name
     form.session = cls.session
+    form.year = cls.year || new Date().getFullYear()
     form.location = cls.location
-    form.time = cls.time
+    form.day = cls.day || 'Monday' // [NEW]
+    form.time = cls.time || ''     // [NEW]
     form.teachers = [...(cls.teachers || [])]
     form.students = [...(cls.students || [])]
   } else {
@@ -169,7 +220,9 @@ const openModal = (cls = null) => {
     editingId.value = null
     form.name = ''
     form.session = classStore.sessions[0]
+    form.year = new Date().getFullYear()
     form.location = classStore.locations[0]
+    form.day = 'Monday'
     form.time = ''
     form.teachers = []
     form.students = []
@@ -200,12 +253,28 @@ const handleDelete = async (id) => {
   }
 }
 
-// --- LIST HELPERS ---
+// --- HELPERS ---
+
+const getMemberName = (email) => {
+  const m = membersStore.getMemberByEmail(email)
+  return m ? `${m.FirstName} ${m.LastName}` : email
+}
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return 'TBA'
+  // Input is "18:00", convert to "6:00 PM"
+  const [h, m] = timeStr.split(':')
+  const hour = parseInt(h)
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  const hour12 = hour % 12 || 12
+  return `${hour12}:${m} ${ampm}`
+}
 
 const addTeacher = () => {
-  if (newTeacher.value && !form.teachers.includes(newTeacher.value)) {
-    form.teachers.push(newTeacher.value.toLowerCase().trim())
-    newTeacher.value = ''
+  const email = pendingTeacherEmail.value
+  if (email && !form.teachers.includes(email)) {
+    form.teachers.push(email)
+    pendingTeacherEmail.value = ''
   }
 }
 
@@ -214,13 +283,14 @@ const removeTeacher = (email) => {
 }
 
 const addStudent = () => {
-  if (newStudent.value) {
-    const email = newStudent.value.toLowerCase().trim()
-    // Check dupe
+  const email = pendingStudentEmail.value
+  if (email) {
     if (!form.students.find(s => s.email === email)) {
-      form.students.push({ email: email, name: email }) // Name placeholder
+      const m = membersStore.getMemberByEmail(email)
+      const name = m ? `${m.FirstName} ${m.LastName}` : email
+      form.students.push({ email: email, name: name })
     }
-    newStudent.value = ''
+    pendingStudentEmail.value = ''
   }
 }
 

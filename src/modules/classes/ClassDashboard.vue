@@ -2,8 +2,11 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-slate-800">My Classes</h1>
-      <div class="space-x-2">
-         <select v-model="selectedSession" class="border rounded px-3 py-1 text-sm">
+      <div class="space-x-2 flex">
+         <select v-model="selectedYear" class="border rounded px-3 py-1 text-sm bg-white">
+           <option v-for="y in classStore.availableYears" :key="y" :value="y">{{ y }}</option>
+         </select>
+         <select v-model="selectedSession" class="border rounded px-3 py-1 text-sm bg-white">
            <option value="">All Sessions</option>
            <option v-for="s in classStore.sessions" :key="s" :value="s">{{ s }}</option>
          </select>
@@ -18,10 +21,12 @@
         <div class="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
           <div>
             <h3 class="font-bold text-lg text-slate-700">{{ cls.name }}</h3>
-            <div class="text-xs text-slate-500 flex gap-2">
-              <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">{{ cls.session }}</span>
-              <span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded">{{ cls.location }}</span>
-              <span>{{ cls.time }}</span>
+            <div class="text-xs text-slate-500 flex gap-2 mt-1">
+              <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 font-bold">
+                {{ cls.year }} • {{ cls.session }}
+              </span>
+              <span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">{{ cls.location }}</span>
+              <span class="px-1 font-medium">{{ cls.day }}s @ {{ formatTime(cls.time) }}</span>
             </div>
           </div>
           <span class="text-xs font-bold text-slate-400">
@@ -54,23 +59,21 @@
                  
                  <div class="flex justify-between mb-2">
                    <span class="font-bold text-slate-700">{{ dog.name }} <span class="font-normal text-slate-500">({{ dog.breed }})</span></span>
-                   <span class="text-xs" :class="dog.vaxStatus === 'Overdue' ? 'text-red-600' : 'text-green-600'">
-                     {{ dog.vaxStatus || 'No Records' }}
-                   </span>
+                   <div class="flex gap-2">
+                        <span v-if="dog.vaccinations?.length" class="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded">Vax OK</span>
+                        <span v-else class="text-[10px] bg-red-100 text-red-800 px-2 py-0.5 rounded">No Vax</span>
+                    </div>
                  </div>
 
                  <div class="flex gap-2 mb-3">
                    <button @click="openNoteModal(dog)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">
                      断 Add Note
                    </button>
-                   <button @click="openVaxModal(dog)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">
-                     断 Update Vax
-                   </button>
                  </div>
 
                  <div v-if="dog.notes?.length" class="text-xs text-slate-600 italic border-l-2 border-slate-300 pl-2">
                    "{{ dog.notes[dog.notes.length-1].text }}" 
-                   <span class="text-slate-400">- {{ new Date(dog.notes[dog.notes.length-1].date.seconds * 1000).toLocaleDateString() }}</span>
+                   <span class="text-slate-400">- {{ formatDate(dog.notes[dog.notes.length-1].timestamp) }}</span>
                  </div>
 
                </div>
@@ -82,9 +85,12 @@
           </div>
         </div>
       </div>
+
+      <div v-if="filteredClasses.length === 0" class="text-center py-12 text-slate-400 italic border-2 border-dashed border-slate-200 rounded-lg">
+        No classes found for {{ selectedYear }} / {{ selectedSession || 'All Sessions' }}.
+      </div>
     </div>
-    
-    </div>
+  </div>
 </template>
 
 <script setup>
@@ -95,11 +101,19 @@ import { useDogStore } from '@/stores/dogStore'
 const classStore = useClassStore()
 const dogStore = useDogStore()
 
+const selectedYear = ref(new Date().getFullYear())
 const selectedSession = ref('')
 const expanded = ref({})
 
 const filteredClasses = computed(() => {
   let list = classStore.myClasses
+  
+  // Filter Year
+  if (selectedYear.value) {
+    list = list.filter(c => (c.year || new Date().getFullYear()) === selectedYear.value)
+  }
+
+  // Filter Session
   if (selectedSession.value) {
     list = list.filter(c => c.session === selectedSession.value)
   }
@@ -113,17 +127,30 @@ const getDogsForStudent = (email) => {
 const toggleExpand = async (email) => {
   expanded.value[email] = !expanded.value[email]
   if (expanded.value[email]) {
-    // Fetch dogs just in time
-    await dogStore.fetchDogsForClass([email])
+    await dogStore.fetchDogsForOwner(email)
   }
 }
 
 const openNoteModal = (dog) => {
-  console.log("Open note modal for", dog.name)
+  const note = prompt(`Add note for ${dog.name}:`)
+  if (note) {
+      dogStore.addNote(dog.id, note)
+  }
 }
 
-const openVaxModal = (dog) => {
-  console.log("Open vax modal for", dog.name)
+const formatTime = (timeStr) => {
+  if (!timeStr) return 'TBA'
+  const [h, m] = timeStr.split(':')
+  const hour = parseInt(h)
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  const hour12 = hour % 12 || 12
+  return `${hour12}:${m} ${ampm}`
+}
+
+const formatDate = (ts) => {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return isNaN(d) ? '' : d.toLocaleDateString()
 }
 
 onMounted(async () => {

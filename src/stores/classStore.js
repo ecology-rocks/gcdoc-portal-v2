@@ -8,7 +8,15 @@ export const useClassStore = defineStore('classes', {
     classes: [],
     loading: false,
     sessions: [
-      'Jan-Feb', 'Mar-April', 'May-Jun', 'Aug-Sep', 'Oct-Nov'
+      '1 (Jan/Feb)', 
+      '2 (Mar/Apr)', 
+      '3 (May/Jun)', 
+      '4 (Aug/Sep)', 
+      '5 (Oct/Nov)'
+    ],
+    // [NEW] Days of Week
+    days: [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
     ],
     locations: [
       'Front Room', 'Agility Room', 'The Land'
@@ -16,11 +24,15 @@ export const useClassStore = defineStore('classes', {
   }),
 
   getters: {
+    availableYears: () => {
+      const current = new Date().getFullYear()
+      return [current - 1, current, current + 1, current + 2, current + 3]
+    },
+
     myClasses: (state) => {
       const auth = useAuthStore()
       if (!auth.user?.email) return []
 
-      // Admin Override
       if (auth.profile?.isAdmin) {
         return state.classes
       }
@@ -39,7 +51,6 @@ export const useClassStore = defineStore('classes', {
 
   actions: {
     async initClasses() {
-      // Always fetch fresh to ensure CRUD updates are seen
       this.loading = true
       const q = query(collection(db, 'classes'))
       const snap = await getDocs(q)
@@ -47,22 +58,23 @@ export const useClassStore = defineStore('classes', {
       this.loading = false
     },
 
-    // --- CRUD ACTIONS ---
-
     async addClass(classData) {
       const payload = {
         name: classData.name,
         session: classData.session || '',
+        year: parseInt(classData.year) || new Date().getFullYear(),
+        
+        // [UPDATED] Day and Time separate
+        day: classData.day || 'Monday',
+        time: classData.time || '', // Stores HH:mm format
+        
         location: classData.location || '',
-        time: classData.time || '',
-        teachers: classData.teachers || [], // Array of emails
-        students: classData.students || [], // Array of objects { email, name }
+        teachers: classData.teachers || [],
+        students: classData.students || [],
         createdAt: Timestamp.now()
       }
       
       const docRef = await addDoc(collection(db, 'classes'), payload)
-      
-      // Update local state
       this.classes.push({ id: docRef.id, ...payload })
     },
 
@@ -72,15 +84,16 @@ export const useClassStore = defineStore('classes', {
       const payload = {
         name: classData.name,
         session: classData.session,
+        year: parseInt(classData.year),
+        day: classData.day, // [UPDATED]
+        time: classData.time, // [UPDATED]
         location: classData.location,
-        time: classData.time,
         teachers: classData.teachers,
         students: classData.students
       }
 
       await updateDoc(docRef, payload)
 
-      // Update local state
       const index = this.classes.findIndex(c => c.id === id)
       if (index !== -1) {
         this.classes[index] = { ...this.classes[index], ...payload }
@@ -92,8 +105,7 @@ export const useClassStore = defineStore('classes', {
       this.classes = this.classes.filter(c => c.id !== id)
     },
 
-    // --- IMPORT / EXPORT ---
-
+    // --- IMPORT/EXPORT ---
     async importGenericRows(rows) {
       const batch = writeBatch(db)
       let count = 0
@@ -103,7 +115,6 @@ export const useClassStore = defineStore('classes', {
           const newDocRef = doc(collection(db, 'classes'))
           
           const parseList = (str) => (!str ? [] : str.split(/[;,]+/).map(s => s.trim().toLowerCase()).filter(s => s))
-          
           const teacherEmails = parseList(row['Teachers'])
           const studentEmails = parseList(row['Students'])
           const studentObjects = studentEmails.map(email => ({ email: email, name: email }))
@@ -112,8 +123,13 @@ export const useClassStore = defineStore('classes', {
             id: newDocRef.id,
             name: row['Name'],
             session: row['Session'] || '',
-            location: row['Location'] || '',
+            year: parseInt(row['Year']) || new Date().getFullYear(),
+            
+            // [UPDATED] Import separate fields
+            day: row['Day'] || 'Monday',
             time: row['Time'] || '',
+            
+            location: row['Location'] || '',
             teachers: teacherEmails,
             students: studentObjects,
             createdAt: new Date()
@@ -126,13 +142,14 @@ export const useClassStore = defineStore('classes', {
     },
 
     async getExportData() {
-      // Ensure we have latest
       await this.initClasses()
       return this.classes.map(d => ({
         Name: d.name,
         Session: d.session,
-        Location: d.location,
+        Year: d.year,
+        Day: d.day, // [NEW]
         Time: d.time,
+        Location: d.location,
         Teachers: (d.teachers || []).join(', '),
         Students: (d.students || []).map(s => s.email).join(', ')
       }))

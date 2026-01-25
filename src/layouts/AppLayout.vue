@@ -35,10 +35,10 @@
           <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Teacher Tools</p>
         </div>
         <RouterLink v-if="classStore.isTeacher" to="/classes"
-          active-class="bg-indigo-600 text-white shadow-lg shadow-indigo-900/50"
-          class="flex items-center px-4 py-3 rounded-lg transition-all hover:bg-slate-800 hover:text-white group mb-4">
-          <span class="mr-3 text-lg">🎓</span>
-          <span class="font-medium">My Classes</span>
+          active-class="bg-slate-800 text-white border-l-4 border-indigo-500"
+          class="flex items-center px-4 py-2 rounded-r-lg transition-colors hover:bg-slate-800 hover:text-white group text-sm">
+          <span class="mr-3">🎓</span>
+          My Classes
         </RouterLink>
         <RouterLink to="/registrar" active-class="bg-slate-800 text-white border-l-4 border-indigo-500" class="flex items-center px-4 py-2 rounded-r-lg transition-colors hover:bg-slate-800 hover:text-white group text-sm">
           <span class="mr-3">📋</span> Registrar
