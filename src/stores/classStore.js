@@ -14,7 +14,6 @@ export const useClassStore = defineStore('classes', {
       '4 (Aug/Sep)', 
       '5 (Oct/Nov)'
     ],
-    // [NEW] Days of Week
     days: [
       'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
     ],
@@ -51,6 +50,7 @@ export const useClassStore = defineStore('classes', {
 
   actions: {
     async initClasses() {
+      // Always fetch fresh to ensure we have the latest list for deduplication
       this.loading = true
       const q = query(collection(db, 'classes'))
       const snap = await getDocs(q)
@@ -63,11 +63,8 @@ export const useClassStore = defineStore('classes', {
         name: classData.name,
         session: classData.session || '',
         year: parseInt(classData.year) || new Date().getFullYear(),
-        
-        // [UPDATED] Day and Time separate
         day: classData.day || 'Monday',
-        time: classData.time || '', // Stores HH:mm format
-        
+        time: classData.time || '',
         location: classData.location || '',
         teachers: classData.teachers || [],
         students: classData.students || [],
@@ -85,8 +82,8 @@ export const useClassStore = defineStore('classes', {
         name: classData.name,
         session: classData.session,
         year: parseInt(classData.year),
-        day: classData.day, // [UPDATED]
-        time: classData.time, // [UPDATED]
+        day: classData.day,
+        time: classData.time,
         location: classData.location,
         teachers: classData.teachers,
         students: classData.students
@@ -107,37 +104,63 @@ export const useClassStore = defineStore('classes', {
 
     // --- IMPORT/EXPORT ---
     async importGenericRows(rows) {
+      // 1. Ensure we have the latest data to check against
+      if (this.classes.length === 0) {
+        await this.initClasses()
+      }
+
       const batch = writeBatch(db)
       let count = 0
 
       rows.forEach(row => {
         if (row['Name']) {
-          const newDocRef = doc(collection(db, 'classes'))
+          const name = row['Name'].trim()
+          const year = parseInt(row['Year']) || new Date().getFullYear()
+          const session = row['Session']?.trim() || ''
+
+          // 2. CHECK FOR DUPLICATES
+          // We define a "Unique Class" as matching Name + Year + Session
+          const existingClass = this.classes.find(c => 
+            c.name.toLowerCase() === name.toLowerCase() && 
+            c.year === year &&
+            c.session.toLowerCase() === session.toLowerCase()
+          )
+
+          // 3. If exists, update that ID. If not, create new ID.
+          const docRef = existingClass 
+            ? doc(db, 'classes', existingClass.id)
+            : doc(collection(db, 'classes'))
           
           const parseList = (str) => (!str ? [] : str.split(/[;,]+/).map(s => s.trim().toLowerCase()).filter(s => s))
           const teacherEmails = parseList(row['Teachers'])
           const studentEmails = parseList(row['Students'])
           const studentObjects = studentEmails.map(email => ({ email: email, name: email }))
 
-          batch.set(newDocRef, {
-            id: newDocRef.id,
-            name: row['Name'],
-            
-            // [UPDATED] New Fields
-            session: row['Session'] || '',
-            year: parseInt(row['Year']) || new Date().getFullYear(),
+          const payload = {
+            // If it's new, we set ID. If existing, this is ignored by Firestore but harmless.
+            id: docRef.id, 
+            name: name,
+            session: session,
+            year: year,
             day: row['Day'] || 'Monday',
-            time: row['Time'] || '', // Expects HH:mm format usually
-            
+            time: row['Time'] || '',
             location: row['Location'] || '',
             teachers: teacherEmails,
             students: studentObjects,
-            createdAt: new Date()
-          })
+            // Only set createdAt if it's a new record
+            ...(existingClass ? {} : { createdAt: Timestamp.now() })
+          }
+
+          // 'merge: true' ensures we update fields without wiping the doc if we missed something
+          batch.set(docRef, payload, { merge: true })
           count++
         }
       })
+      
       await batch.commit()
+      
+      // Refresh local state to reflect updates
+      await this.initClasses()
       return count
     },
 
@@ -145,7 +168,6 @@ export const useClassStore = defineStore('classes', {
       await this.initClasses()
       return this.classes.map(d => ({
         Name: d.name,
-        // [UPDATED] New Fields
         Year: d.year,
         Session: d.session,
         Day: d.day,

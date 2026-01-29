@@ -1,222 +1,268 @@
 import { defineStore } from 'pinia'
 import { db } from '@/firebase'
-import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, query, where, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore'
+import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, query, where, arrayUnion, arrayRemove, writeBatch, Timestamp } from 'firebase/firestore'
 import { useAuthStore } from '@/stores/authStore'
 
 export const useDogStore = defineStore('dogs', {
-    state: () => ({
-        dogs: [],
-        loading: false
-    }),
+  state: () => ({
+    dogs: [],
+    loading: false
+  }),
 
-    getters: {
-        getDogsByOwner: (state) => (ownerId) => {
-            if (!ownerId) return []
-            return state.dogs.filter(d => d.ownerId?.toLowerCase() === ownerId?.toLowerCase())
-        },
-        getDogById: (state) => (id) => {
-            return state.dogs.find(d => d.id === id)
-        }
+  getters: {
+    getDogsByOwner: (state) => (ownerId) => {
+      if (!ownerId) return []
+      return state.dogs.filter(d => d.ownerId?.toLowerCase() === ownerId?.toLowerCase())
+    },
+    getDogById: (state) => (id) => {
+      return state.dogs.find(d => d.id === id)
+    }
+  },
+
+  actions: {
+    // --- FETCHING ---
+    async fetchDogsForOwner(ownerId) {
+       if(!ownerId) return
+       this.loading = true
+       const q = query(collection(db, 'dogs'), where('ownerId', '==', ownerId.toLowerCase()))
+       const snap = await getDocs(q)
+       const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+       
+       fetched.forEach(dog => {
+         const idx = this.dogs.findIndex(d => d.id === dog.id)
+         if(idx === -1) this.dogs.push(dog)
+         else this.dogs[idx] = dog
+       })
+       this.loading = false
     },
 
-    actions: {
-        // --- FETCHING ---
-        async fetchDogsForOwner(ownerId) {
-            if (!ownerId) return
-            this.loading = true
-            const q = query(collection(db, 'dogs'), where('ownerId', '==', ownerId.toLowerCase()))
-            const snap = await getDocs(q)
-            const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    async fetchDogsForClass(studentIds) {
+      if (!studentIds || studentIds.length === 0) return
+      this.loading = true
+      
+      // Firestore 'in' query limit is 10. 
+      // For production safety, we slice to 10 here.
+      const safeIds = studentIds.slice(0, 10) 
 
-            fetched.forEach(dog => {
-                const idx = this.dogs.findIndex(d => d.id === dog.id)
-                if (idx === -1) this.dogs.push(dog)
-                else this.dogs[idx] = dog
-            })
-            this.loading = false
-        },
+      const q = query(collection(db, 'dogs'), where('ownerId', 'in', safeIds))
+      const snap = await getDocs(q)
+      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      
+      fetched.forEach(dog => {
+        const index = this.dogs.findIndex(d => d.id === dog.id)
+        if (index === -1) this.dogs.push(dog)
+        else this.dogs[index] = dog
+      })
+      this.loading = false
+    },
 
-        async fetchDogsForClass(studentIds) {
-            if (!studentIds || studentIds.length === 0) return
-            this.loading = true
-            const safeIds = studentIds.slice(0, 10)
-            const q = query(collection(db, 'dogs'), where('ownerId', 'in', safeIds))
-            const snap = await getDocs(q)
-            const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    // --- BASIC DOG CRUD ---
+    async addDog(dogData) {
+      const auth = useAuthStore()
+      const newRef = doc(collection(db, 'dogs'))
+      
+      const payload = {
+        id: newRef.id,
+        name: dogData.name || '',
+        breed: dogData.breed || '',
+        birthdate: dogData.birthdate || '', 
+        sex: dogData.sex || 'U',
+        neutered: !!dogData.neutered, 
+        ownerId: dogData.ownerId,
+        
+        vaccinations: [],
+        notes: [],
+        
+        createdAt: Timestamp.now(),
+        createdBy: auth.user?.email || 'system'
+      }
 
-            fetched.forEach(dog => {
-                const index = this.dogs.findIndex(d => d.id === dog.id)
-                if (index === -1) this.dogs.push(dog)
-                else this.dogs[index] = dog
-            })
-            this.loading = false
-        },
+      await setDoc(newRef, payload)
+      this.dogs.push(payload)
+    },
 
-        // --- BASIC DOG CRUD ---
-        async addDog(dogData) {
-            const auth = useAuthStore()
-            const newRef = doc(collection(db, 'dogs'))
+    async updateDog(id, dogData) {
+      const docRef = doc(db, 'dogs', id)
+      // Only update fields passed in dogData
+      await updateDoc(docRef, dogData)
+      
+      const index = this.dogs.findIndex(d => d.id === id)
+      if (index !== -1) {
+        this.dogs[index] = { ...this.dogs[index], ...dogData }
+      }
+    },
 
-            const payload = {
-                id: newRef.id,
-                name: dogData.name || '',
-                breed: dogData.breed || '',
-                birthdate: dogData.birthdate || '',
-                sex: dogData.sex || 'U',
-                neutered: !!dogData.neutered,
-                ownerId: dogData.ownerId,
+    async deleteDog(id) {
+      await deleteDoc(doc(db, 'dogs', id))
+      this.dogs = this.dogs.filter(d => d.id !== id)
+    },
 
-                vaccinations: [],
-                notes: [],
+    // [NEW] Bulk Delete for Member Cleanup
+    async deleteDogsByOwner(ownerId) {
+      if (!ownerId) return
+      
+      const q = query(collection(db, 'dogs'), where('ownerId', '==', ownerId.toLowerCase()))
+      const snap = await getDocs(q)
+      
+      if (snap.empty) return
 
-                createdAt: Timestamp.now(),
-                createdBy: auth.user?.email || 'system'
-            }
+      const batch = writeBatch(db)
+      snap.docs.forEach(d => {
+        batch.delete(d.ref)
+      })
+      await batch.commit()
 
-            await setDoc(newRef, payload)
-            this.dogs.push(payload)
-        },
+      // Update local state
+      this.dogs = this.dogs.filter(d => d.ownerId !== ownerId.toLowerCase())
+    },
 
-        async updateDog(id, dogData) {
-            const docRef = doc(db, 'dogs', id)
-            await updateDoc(docRef, dogData)
+    // --- VACCINATIONS CRUD ---
+    async addVaccination(dogId, vax) {
+      const auth = useAuthStore()
+      const dogRef = doc(db, 'dogs', dogId)
+      
+      // Use simple random ID generation safe for client-side
+      const newVax = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        name: vax.name,
+        dateGiven: vax.dateGiven,
+        dateDue: vax.dateDue,
+        addedBy: auth.user?.email || 'system',
+        addedAt: new Date().toISOString()
+      }
 
-            const index = this.dogs.findIndex(d => d.id === id)
-            if (index !== -1) {
-                this.dogs[index] = { ...this.dogs[index], ...dogData }
-            }
-        },
+      await updateDoc(dogRef, {
+        vaccinations: arrayUnion(newVax)
+      })
 
-        async deleteDog(id) {
-            await deleteDoc(doc(db, 'dogs', id))
-            this.dogs = this.dogs.filter(d => d.id !== id)
-        },
+      // Update Local
+      const dog = this.dogs.find(d => d.id === dogId)
+      if (dog) {
+        if (!dog.vaccinations) dog.vaccinations = []
+        dog.vaccinations.push(newVax)
+      }
+    },
 
-        // --- VACCINATIONS CRUD ---
-        async addVaccination(dogId, vax) {
-            const auth = useAuthStore()
-            const dogRef = doc(db, 'dogs', dogId)
+    async deleteVaccination(dogId, vaxId) {
+      const dog = this.dogs.find(d => d.id === dogId)
+      if (!dog) return
 
-            const newVax = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-                name: vax.name,
-                dateGiven: vax.dateGiven,
-                dateDue: vax.dateDue,
-                addedBy: auth.user?.email || 'system',
-                addedAt: new Date().toISOString()
-            }
+      const vaxToRemove = dog.vaccinations.find(v => v.id === vaxId)
+      if (!vaxToRemove) return
 
-            await updateDoc(dogRef, {
-                vaccinations: arrayUnion(newVax)
-            })
+      const dogRef = doc(db, 'dogs', dogId)
+      await updateDoc(dogRef, {
+        vaccinations: arrayRemove(vaxToRemove)
+      })
 
-            const dog = this.dogs.find(d => d.id === dogId)
-            if (dog) {
-                if (!dog.vaccinations) dog.vaccinations = []
-                dog.vaccinations.push(newVax)
-            }
-        },
+      dog.vaccinations = dog.vaccinations.filter(v => v.id !== vaxId)
+    },
 
-        async deleteVaccination(dogId, vaxId) {
-            const dog = this.dogs.find(d => d.id === dogId)
-            if (!dog) return
+    // --- NOTES CRUD ---
+    async addNote(dogId, text) {
+      const auth = useAuthStore()
+      const dogRef = doc(db, 'dogs', dogId)
+      
+      const newNote = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        text: text,
+        author: auth.user?.email || 'system',
+        timestamp: new Date().toISOString(), 
+        updatedAt: null
+      }
 
-            const vaxToRemove = dog.vaccinations.find(v => v.id === vaxId)
-            if (!vaxToRemove) return
+      await updateDoc(dogRef, {
+        notes: arrayUnion(newNote)
+      })
 
-            const dogRef = doc(db, 'dogs', dogId)
-            await updateDoc(dogRef, {
-                vaccinations: arrayRemove(vaxToRemove)
-            })
+      const dog = this.dogs.find(d => d.id === dogId)
+      if (dog) {
+        if (!dog.notes) dog.notes = []
+        dog.notes.push(newNote)
+      }
+    },
 
-            dog.vaccinations = dog.vaccinations.filter(v => v.id !== vaxId)
-        },
+    async deleteNote(dogId, noteId) {
+      const dog = this.dogs.find(d => d.id === dogId)
+      if (!dog) return
 
-        // --- NOTES CRUD ---
-        async addNote(dogId, text) {
-            const auth = useAuthStore()
-            const dogRef = doc(db, 'dogs', dogId)
+      const noteToRemove = dog.notes.find(n => n.id === noteId)
+      if (!noteToRemove) return
 
-            const newNote = {
-                // Safer ID gen than crypto.randomUUID() for some browsers
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-                text: text,
-                author: auth.user?.email || 'system',
-                timestamp: new Date().toISOString(),
-                updatedAt: null
-            }
+      const dogRef = doc(db, 'dogs', dogId)
+      await updateDoc(dogRef, {
+        notes: arrayRemove(noteToRemove)
+      })
 
-            await updateDoc(dogRef, {
-                notes: arrayUnion(newNote)
-            })
+      dog.notes = dog.notes.filter(n => n.id !== noteId)
+    },
 
-            const dog = this.dogs.find(d => d.id === dogId)
-            if (dog) {
-                if (!dog.notes) dog.notes = []
-                dog.notes.push(newNote)
-            }
-        },
+    // --- IMPORT/EXPORT ---
+    async importGenericRows(rows) {
+      // 1. Load all dogs to check for duplicates (efficient for <2000 dogs)
+      // Force fetch to ensure duplicate check is accurate against DB
+      const q = query(collection(db, 'dogs'))
+      const snap = await getDocs(q)
+      const existingDogs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
-        async deleteNote(dogId, noteId) {
-            const dog = this.dogs.find(d => d.id === dogId)
-            if (!dog) return
+      const batch = writeBatch(db)
+      let count = 0
+      
+      rows.forEach(row => {
+        if (row['Name'] && row['OwnerEmail']) {
+          const name = row['Name'].trim()
+          const ownerId = row['OwnerEmail'].trim().toLowerCase()
 
-            const noteToRemove = dog.notes.find(n => n.id === noteId)
-            if (!noteToRemove) return
+          // 2. CHECK FOR DUPLICATES (Match Name + Owner)
+          const match = existingDogs.find(d => 
+            d.name.toLowerCase() === name.toLowerCase() && 
+            d.ownerId === ownerId
+          )
 
-            const dogRef = doc(db, 'dogs', dogId)
-            await updateDoc(dogRef, {
-                notes: arrayRemove(noteToRemove)
-            })
+          const docRef = match 
+            ? doc(db, 'dogs', match.id)
+            : doc(collection(db, 'dogs'))
 
-            dog.notes = dog.notes.filter(n => n.id !== noteId)
-        },
+          // Parse Booleans/Dates
+          const neuteredRaw = (row['Neutered'] || '').toString().toLowerCase()
+          const isNeutered = ['yes', 'true', '1', 'y'].includes(neuteredRaw)
 
-        // --- IMPORT/EXPORT ---
-        async importGenericRows(rows) {
-            const batch = require('firebase/firestore').writeBatch(db)
-            let count = 0
+          const payload = {
+            id: docRef.id,
+            name: name,
+            breed: row['Breed'] || 'Unknown',
+            ownerId: ownerId,
+            sex: row['Sex'] || 'U',
+            birthdate: row['Birthdate'] || '',
+            neutered: isNeutered,
+            // Only overwrite creation date/arrays if new
+            ...(match ? {} : { createdAt: Timestamp.now(), vaccinations: [], notes: [] })
+          }
 
-            rows.forEach(row => {
-                if (row['Name'] && row['OwnerEmail']) {
-                    const newDocRef = doc(collection(db, 'dogs'))
-                    batch.set(newDocRef, {
-                        id: newDocRef.id,
-                        name: row['Name'],
-                        breed: row['Breed'] || 'Unknown',
-                        ownerId: row['OwnerEmail'].trim().toLowerCase(),
-
-                        // [UPDATED] New Fields
-                        sex: row['Sex'] || 'U',
-                        birthdate: row['Birthdate'] || '',
-                        neutered: isNeutered,
-
-                        createdAt: Timestamp.now(),
-                        vaccinations: [],
-                        notes: []
-                    })
-                    count++
-                }
-            })
-            await batch.commit()
-            return count
-        },
-
-        async getExportData() {
-            const q = query(collection(db, 'dogs'))
-            const snap = await getDocs(q)
-            return snap.docs.map(d => {
-                const data = d.data()
-                return {
-                    Name: data.name,
-                    Breed: data.breed,
-                    OwnerEmail: data.ownerId,
-                    // [UPDATED] New Fields
-                    Sex: data.sex || 'U',
-                    Birthdate: data.birthdate || '',
-                    Neutered: data.neutered ? 'Yes' : 'No'
-                }
-            })
+          batch.set(docRef, payload, { merge: true })
+          count++
         }
+      })
+      await batch.commit()
+      return count
+    },
+
+    async getExportData() {
+      // Fetch fresh data for export
+      const q = query(collection(db, 'dogs'))
+      const snap = await getDocs(q)
+      
+      return snap.docs.map(d => {
+        const data = d.data()
+        return {
+          Name: data.name,
+          Breed: data.breed,
+          OwnerEmail: data.ownerId,
+          Sex: data.sex || 'U',
+          Birthdate: data.birthdate || '',
+          Neutered: data.neutered ? 'Yes' : 'No'
+        }
+      })
     }
+  }
 })

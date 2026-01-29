@@ -66,8 +66,8 @@
                  </div>
 
                  <div class="flex gap-2 mb-3">
-                   <button @click="openNoteModal(dog)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">
-                     断 Add Note
+                   <button @click="openNoteModal(dog, student.email)" class="text-xs bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1">
+                     📝 Add Note
                    </button>
                  </div>
 
@@ -90,6 +90,15 @@
         No classes found for {{ selectedYear }} / {{ selectedSession || 'All Sessions' }}.
       </div>
     </div>
+
+    <DogModal 
+      :is-open="isDogModalOpen"
+      :dog-id="selectedDogId"
+      :owner-email="selectedOwnerEmail"
+      initial-tab="Notes" 
+      @close="isDogModalOpen = false"
+    />
+
   </div>
 </template>
 
@@ -97,6 +106,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useClassStore } from '@/stores/classStore'
 import { useDogStore } from '@/stores/dogStore'
+import DogModal from '@/modules/members/components/DogModal.vue'
 
 const classStore = useClassStore()
 const dogStore = useDogStore()
@@ -105,15 +115,18 @@ const selectedYear = ref(new Date().getFullYear())
 const selectedSession = ref('')
 const expanded = ref({})
 
+// Modal State
+const isDogModalOpen = ref(false)
+const selectedDogId = ref(null)
+const selectedOwnerEmail = ref(null)
+
 const filteredClasses = computed(() => {
   let list = classStore.myClasses
   
-  // Filter Year
   if (selectedYear.value) {
     list = list.filter(c => (c.year || new Date().getFullYear()) === selectedYear.value)
   }
 
-  // Filter Session
   if (selectedSession.value) {
     list = list.filter(c => c.session === selectedSession.value)
   }
@@ -131,11 +144,11 @@ const toggleExpand = async (email) => {
   }
 }
 
-const openNoteModal = (dog) => {
-  const note = prompt(`Add note for ${dog.name}:`)
-  if (note) {
-      dogStore.addNote(dog.id, note)
-  }
+// [UPDATED] Open the Modal instead of Prompt
+const openNoteModal = (dog, ownerEmail) => {
+  selectedDogId.value = dog.id
+  selectedOwnerEmail.value = ownerEmail
+  isDogModalOpen.value = true
 }
 
 const formatTime = (timeStr) => {

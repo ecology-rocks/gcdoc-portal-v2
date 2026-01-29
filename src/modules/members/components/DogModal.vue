@@ -124,13 +124,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const props = defineProps({
   isOpen: Boolean,
   dogId: String,    // If editing existing
-  ownerEmail: String // If creating new
+  ownerEmail: String, // If creating new
+  initialTab: { type: String, default: 'Info' } // [NEW] Default tab
 })
 
 const emit = defineEmits(['close'])
@@ -167,7 +168,8 @@ const isOverdue = (dateStr) => dateStr && new Date(dateStr) < new Date()
 // Initialize Form
 watch(() => props.isOpen, (val) => {
   if (val) {
-    activeTab.value = 'Info'
+    activeTab.value = props.initialTab // [UPDATED] Respect initialTab prop
+    
     if (props.dogId && currentDog.value) {
       // Edit Mode
       Object.assign(form, {

@@ -21,7 +21,7 @@ export const useLogsStore = defineStore('logs', {
       return hoursMap
     },
 
-    // 2. [NEW] Fiscal Year Total (Oct 1 - Sept 30)
+    // 2. Fiscal Year Total (Oct 1 - Sept 30)
     fiscalYearHours: (state) => {
       const hoursMap = {}
       const now = new Date()
@@ -131,6 +131,13 @@ export const useLogsStore = defineStore('logs', {
     // --- IMPORT / EXPORT ACTIONS ---
 
     async importGenericRows(rows) {
+      // 1. Ensure we have logs loaded to check against for duplicates
+      if (this.logs.length === 0) {
+        const q = query(collection(db, 'logs'))
+        const snap = await getDocs(q)
+        this.logs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      }
+
       const batch = writeBatch(db)
       let count = 0
 
@@ -153,9 +160,27 @@ export const useLogsStore = defineStore('logs', {
             isMaint = (val === 'TRUE' || val === 'YES')
           }
 
-          const newLogRef = doc(collection(db, 'logs'))
+          // 2. DUPLICATE CHECK
+          // Logs don't have unique IDs, so we check: Email + Date(YYYY-MM-DD) + Hours
+          const rowDateStr = dateObj.toISOString().split('T')[0]
           
-          batch.set(newLogRef, {
+          const match = this.logs.find(l => {
+            const lDate = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
+            const lDateStr = lDate.toISOString().split('T')[0]
+            
+            return (
+              l.MemberEmail?.toLowerCase() === email.toLowerCase() &&
+              lDateStr === rowDateStr && 
+              Math.abs((l.Hours || 0) - hours) < 0.01 // Float tolerance
+            )
+          })
+
+          // 3. Update Existing OR Create New
+          const docRef = match 
+            ? doc(db, 'logs', match.id)
+            : doc(collection(db, 'logs'))
+
+          batch.set(docRef, {
             MemberEmail: email,
             MemberName: row['MemberName'] || '',
             Date: Timestamp.fromDate(dateObj),
@@ -168,7 +193,8 @@ export const useLogsStore = defineStore('logs', {
             Status: row['Status'] || 'approved',
             SourceSheet: row['SourceSheet'] || '',
             FiscalYearRollover: row['FiscalYearRollover'] || 'No'
-          })
+          }, { merge: true })
+          
           count++
         }
       })
@@ -178,6 +204,7 @@ export const useLogsStore = defineStore('logs', {
     },
 
     async getExportData() {
+      // Fetch fresh data for export
       const q = query(collection(db, 'logs'))
       const snap = await getDocs(q)
       const rawLogs = snap.docs.map(d => d.data())
