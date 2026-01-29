@@ -8,6 +8,12 @@
           :class="{ active: viewMode === 'list' }">
           📋 Log History
         </button>
+<button 
+  @click="viewMode = 'approvals'" 
+  :class="{ active: viewMode === 'approvals' }">
+  ✅ Approvals
+  <span v-if="pendingCount > 0" class="badge">{{ pendingCount }}</span>
+</button>
         <button 
           @click="viewMode = 'single'" 
           :class="{ active: viewMode === 'single' }">
@@ -25,17 +31,22 @@
       <LogHistory v-if="viewMode === 'list'" />
       <SingleEntryForm v-else-if="viewMode === 'single'" />
       <SheetManager v-else-if="viewMode === 'sheets'" />
+      <LogApprovals v-else-if="viewMode === 'approvals'" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import LogHistory from './components/LogHistory.vue'
 import SingleEntryForm from './components/SingleEntryForm.vue'
 import SheetManager from './components/SheetManager.vue'
+import LogApprovals from './components/LogApprovals.vue'
+import { useLogsStore } from '@/stores/logsStore'
 
 const viewMode = ref('list')
+const logsStore = useLogsStore()
+const pendingCount = computed(() => logsStore.pendingLogs.length)
 </script>
 
 <style scoped>
@@ -59,6 +70,15 @@ h1 {
   font-size: 1.5rem;
   font-weight: bold;
   color: #111827;
+}
+
+.badge {
+  background: #ef4444;
+  color: white;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  margin-left: 0.5rem;
 }
 
 .nav-tabs {

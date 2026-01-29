@@ -10,6 +10,7 @@ import MemberManager from '@/modules/members/MemberManager.vue'
 import MeetingView from '@/modules/admin/MeetingView.vue'
 import RegistrarView from '@/modules/admin/RegistrarView.vue' // [NEW IMPORT]
 import ClassDashboard from '@/modules/classes/ClassDashboard.vue'
+import KioskView from '@/views/KioskView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,12 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: Login
+    },
+    {
+      path: '/kiosk',
+      name: 'kiosk',
+      component: KioskView,
+      // No 'requiresAuth' meta
     },
     {
       path: '/',
