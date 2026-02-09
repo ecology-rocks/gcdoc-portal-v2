@@ -1,5 +1,5 @@
 <template>
-  <div class="relative">
+  <div class="member-select">
     <input
       type="text"
       v-model="searchQuery"
@@ -7,23 +7,21 @@
       @input="handleInput"
       @blur="closeDelayed"
       placeholder="Type Name (Last, First)..."
-      class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-      :class="{'border-red-300': hasError}"
+      class="select-input"
     />
     
-    <div v-if="isOpen && filteredMembers.length > 0" 
-         class="absolute z-50 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+    <div v-if="isOpen && filteredMembers.length > 0" class="dropdown-menu">
       <div
         v-for="member in filteredMembers"
         :key="member.id"
         @mousedown.prevent="selectMember(member)"
-        class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-indigo-600 hover:text-white group"
+        class="dropdown-item"
       >
-        <div class="flex flex-col">
-          <span class="font-medium block truncate">
+        <div class="item-content">
+          <span class="member-name">
             {{ member.LastName }}, {{ member.FirstName }}
           </span>
-          <span class="text-xs text-gray-500 group-hover:text-indigo-200">
+          <span class="member-email">
             {{ member.Email }}
           </span>
         </div>
@@ -36,20 +34,17 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMembersStore } from '@/stores/membersStore'
 
-const props = defineProps(['modelValue']) // This receives the 'email'
+const props = defineProps(['modelValue'])
 const emit = defineEmits(['update:modelValue'])
 
 const store = useMembersStore()
 const isOpen = ref(false)
 const searchQuery = ref('')
-const hasError = ref(false)
 
-// Initialize list if empty
 onMounted(() => {
   if (store.members.length === 0) store.initMembers()
 })
 
-// Sync: If the parent passes in an email (e.g. viewing an old log), set the text box to the Name
 watch(() => props.modelValue, (newVal) => {
   if (!newVal) {
     searchQuery.value = ''
@@ -59,7 +54,7 @@ watch(() => props.modelValue, (newVal) => {
   if (found) {
     searchQuery.value = `${found.LastName}, ${found.FirstName}`
   } else {
-    searchQuery.value = newVal // Fallback if name not found
+    searchQuery.value = newVal
   }
 }, { immediate: true })
 
@@ -67,7 +62,6 @@ const filteredMembers = computed(() => {
   if (!searchQuery.value) return []
   const q = searchQuery.value.toLowerCase()
   
-  // Return top 10 matches
   return store.members
     .filter(m => {
       const full = `${m.LastName}, ${m.FirstName}`.toLowerCase()
@@ -80,18 +74,87 @@ const filteredMembers = computed(() => {
 
 const handleInput = () => {
   isOpen.value = true
-  // If user clears box, clear the email value
   if (!searchQuery.value) emit('update:modelValue', '')
 }
 
 const selectMember = (member) => {
   searchQuery.value = `${member.LastName}, ${member.FirstName}`
-  emit('update:modelValue', member.Email) // Send EMAIL back to parent
+  emit('update:modelValue', member.Email)
   isOpen.value = false
 }
 
-// Close dropdown with slight delay to allow click events to register
 const closeDelayed = () => {
   setTimeout(() => isOpen.value = false, 200)
 }
 </script>
+
+<style scoped>
+.member-select {
+  position: relative;
+  width: 100%;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.select-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-sizing: border-box;
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 1px #6366f1;
+}
+
+.dropdown-menu {
+  position: absolute;
+  z-index: 50;
+  margin-top: 0.25rem;
+  width: 100%;
+  background-color: white;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-radius: 0.375rem;
+  max-height: 15rem;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+}
+
+.dropdown-item {
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  user-select: none;
+}
+
+.dropdown-item:hover {
+  background-color: #4f46e5;
+}
+
+.dropdown-item:hover .member-name,
+.dropdown-item:hover .member-email {
+  color: white;
+}
+
+.item-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.member-name {
+  display: block;
+  font-weight: 500;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-email {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+</style>

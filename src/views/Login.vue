@@ -1,33 +1,33 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-    <div class="max-w-md w-full bg-white rounded-lg shadow-xl overflow-hidden p-8">
+  <div class="login-container">
+    <div class="login-card">
       
-      <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">GCDOC Portal</h1>
-        <p class="text-gray-500 mt-2">Member Access & Log Tracking</p>
+      <div class="login-header">
+        <h1>GCDOC Portal</h1>
+        <p>Member Access & Log Tracking</p>
       </div>
 
-      <div class="space-y-4">
-        <div v-if="authStore.authError" class="bg-red-50 text-red-600 p-3 rounded text-sm text-center">
+      <div class="login-form">
+        <div v-if="authStore.authError" class="error-message">
           {{ authStore.authError }}
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700">Email Address</label>
+        <div class="form-group">
+          <label>Email Address</label>
           <input 
             v-model="email" 
             type="email" 
-            class="w-full mt-1 p-3 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none"
+            class="form-input"
             placeholder="Enter the email you use for the club"
           >
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700">Password</label>
+        <div class="form-group">
+          <label>Password</label>
           <input 
             v-model="password" 
             type="password" 
-            class="w-full mt-1 p-3 border rounded-md focus:ring-2 focus:ring-indigo-500 outline-none"
+            class="form-input"
             placeholder="••••••••"
           >
         </div>
@@ -36,7 +36,7 @@
           v-if="mode === 'login'"
           @click="handleLogin" 
           :disabled="loading"
-          class="w-full bg-indigo-600 text-white py-3 rounded-md font-bold hover:bg-indigo-700 transition disabled:opacity-50"
+          class="btn btn-primary"
         >
           {{ loading ? 'Signing In...' : 'Sign In' }}
         </button>
@@ -45,20 +45,20 @@
           v-else
           @click="handleRegister" 
           :disabled="loading"
-          class="w-full bg-green-600 text-white py-3 rounded-md font-bold hover:bg-green-700 transition disabled:opacity-50"
+          class="btn btn-success"
         >
           {{ loading ? 'Creating Account...' : 'Activate Account' }}
         </button>
       </div>
 
-      <div class="mt-6 text-center text-sm">
+      <div class="login-footer">
         <p v-if="mode === 'login'">
           First time here? 
-          <a href="#" @click.prevent="mode = 'register'" class="text-indigo-600 font-bold hover:underline">Activate your account</a>
+          <a href="#" @click.prevent="mode = 'register'">Activate your account</a>
         </p>
         <p v-else>
           Already have an account? 
-          <a href="#" @click.prevent="mode = 'login'" class="text-indigo-600 font-bold hover:underline">Sign In</a>
+          <a href="#" @click.prevent="mode = 'login'">Sign In</a>
         </p>
       </div>
 
@@ -103,3 +103,125 @@ const handleRegister = async () => {
   }
 }
 </script>
+
+<style scoped>
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0f172a; /* Slate 900 */
+  padding: 1rem;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 450px;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  padding: 2rem;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.login-header h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.login-header p {
+  color: #6b7280;
+  margin-top: 0.5rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.error-message {
+  background-color: #fef2f2;
+  color: #dc2626;
+  padding: 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 1rem;
+  box-sizing: border-box; /* Crucial for input width */
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.btn {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: opacity 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #4f46e5;
+  color: white;
+}
+.btn-primary:hover:not(:disabled) { background-color: #4338ca; }
+
+.btn-success {
+  background-color: #16a34a;
+  color: white;
+}
+.btn-success:hover:not(:disabled) { background-color: #15803d; }
+
+.login-footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.login-footer a {
+  color: #4f46e5;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
+}
+</style>

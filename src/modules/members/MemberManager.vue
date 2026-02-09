@@ -1,63 +1,63 @@
 <template>
-    <div class="h-full flex flex-col">
-        <div class="flex justify-between items-center mb-6">
+    <div class="manager-layout">
+        <div class="manager-header">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900">Member Directory</h1>
-                <p class="text-sm text-gray-500">{{ filteredMembers.length }} active records found</p>
+                <h1>Member Directory</h1>
+                <p class="subtitle">{{ filteredMembers.length }} active records found</p>
             </div>
-            <div class="flex gap-3">
-                <input v-model="search" type="text" placeholder="Search members..."
-                    class="px-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                <button @click="$router.push('/members/add')"
-                    class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2">
+            <div class="actions">
+                <input 
+                  v-model="search" 
+                  type="text" 
+                  placeholder="Search members..."
+                  class="search-input"
+                >
+                <button @click="$router.push('/members/add')" class="btn-add">
                     <span>+</span> Add Member
                 </button>
             </div>
         </div>
 
-        <div class="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
-            <div class="overflow-y-auto flex-1">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50 sticky top-0">
+        <div class="table-card">
+            <div class="table-container">
+                <table class="member-table">
+                    <thead>
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Member</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Contact</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Type</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Status</th>
-                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Actions</th>
+                            <th>Member</th>
+                            <th>Contact</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th class="text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <tr v-for="m in filteredMembers" :key="m.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-900">{{ m.LastName }}, {{ m.FirstName }}</div>
-                                <div v-if="m.FirstName2" class="text-xs text-gray-500">& {{ m.FirstName2 }} {{
-                                    m.LastName2 }}</div>
+                    <tbody>
+                        <tr v-for="m in filteredMembers" :key="m.id">
+                            <td>
+                                <div class="primary-text">{{ m.LastName }}, {{ m.FirstName }}</div>
+                                <div v-if="m.FirstName2" class="secondary-text">
+                                  & {{ m.FirstName2 }} {{ m.LastName2 }}
+                                </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900">{{ m.Email }}</div>
-                                <div class="text-xs text-gray-500">{{ m.Phone1 }}</div>
+                            <td>
+                                <div class="primary-text">{{ m.Email }}</div>
+                                <div class="secondary-text">{{ m.Phone1 }}</div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <span
-                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                            <td>
+                                <span class="badge badge-blue">
                                     {{ m.MembershipType }}
                                 </span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 uppercase text-xs font-bold">
-                                {{ m.Role }}
+                            <td>
+                                <span class="status-text">{{ m.Role }}</span>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button @click="$router.push(`/members/edit/${m.Email}`)"
-                                    class="text-indigo-600 hover:text-indigo-900 font-bold">
+                            <td class="text-right">
+                                <button 
+                                  @click="$router.push(`/members/edit/${m.Email}`)"
+                                  class="btn-link"
+                                >
                                     Edit
                                 </button>
-                                </td>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
@@ -87,3 +87,151 @@ const filteredMembers = computed(() => {
     )
 })
 </script>
+
+<style scoped>
+.manager-layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1f2937;
+}
+
+.manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.manager-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.search-input {
+  padding: 0.5rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.btn-add {
+  background-color: #4f46e5;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.btn-add:hover { background-color: #4338ca; }
+
+/* Table Styles */
+.table-card {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-container {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.member-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.member-table th {
+  background-color: #f9fafb;
+  position: sticky;
+  top: 0;
+  padding: 0.75rem 1.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.member-table td {
+  padding: 1rem 1.5rem;
+  white-space: nowrap;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.member-table tr:hover {
+  background-color: #f9fafb;
+}
+
+.primary-text {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.secondary-text {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.status-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.badge {
+  display: inline-flex;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.badge-blue {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.btn-link:hover {
+  color: #312e81;
+}
+
+.text-right { text-align: right; }
+</style>

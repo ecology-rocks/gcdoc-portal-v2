@@ -1,46 +1,46 @@
 <template>
-  <div class="bg-gray-50 rounded-lg border border-gray-200 p-6">
-    <div class="flex justify-between items-center mb-6">
-      <div class="flex items-center gap-2">
-        <span class="text-2xl">🐕</span>
-        <h3 class="text-xl font-bold text-gray-800">Dogs</h3>
+  <div class="dog-manager">
+    <div class="dm-header">
+      <div class="title-group">
+        <span class="icon">🐕</span>
+        <h3>Dogs</h3>
       </div>
-      <button @click="openModal()" class="text-sm bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 shadow">
+      <button @click="openModal()" class="btn-add">
         + Add Dog
       </button>
     </div>
 
-    <div v-if="loading" class="text-gray-500 italic">Loading dogs...</div>
+    <div v-if="loading" class="loading">Loading dogs...</div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div v-for="dog in dogs" :key="dog.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex justify-between items-start">
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-lg text-gray-900">{{ dog.name }}</span>
-            <span v-if="dog.neutered" class="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full uppercase font-bold">Neutered</span>
+    <div v-else class="dogs-grid">
+      <div v-for="dog in dogs" :key="dog.id" class="dog-card">
+        <div class="dog-info">
+          <div class="dog-title">
+            <span class="name">{{ dog.name }}</span>
+            <span v-if="dog.neutered" class="badge-neutered">Neutered</span>
           </div>
-          <div class="text-sm text-gray-500 mt-1">
+          <div class="dog-meta">
             {{ dog.breed }} • {{ dog.sex === 'M' ? 'Male' : dog.sex === 'F' ? 'Female' : 'Unknown' }}
           </div>
-          <div class="text-xs text-gray-400 mt-1">
+          <div class="dog-born">
             Born: {{ dog.birthdate || 'N/A' }}
           </div>
-          <div class="flex gap-2 mt-3">
-            <span class="text-xs px-2 py-0.5 rounded border" :class="dog.vaccinations?.length ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'">
+          <div class="dog-stats">
+            <span class="stat" :class="dog.vaccinations?.length ? 'stat-green' : 'stat-red'">
               {{ dog.vaccinations?.length || 0 }} Vaccines
             </span>
-            <span class="text-xs px-2 py-0.5 rounded border bg-gray-50 border-gray-200 text-gray-600">
+            <span class="stat stat-gray">
               {{ dog.notes?.length || 0 }} Notes
             </span>
           </div>
         </div>
-        <div class="flex flex-col gap-2">
-          <button @click="openModal(dog.id)" class="text-xs border border-indigo-200 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-50">Manage</button>
-          <button @click="deleteDog(dog.id)" class="text-xs border border-red-200 text-red-600 px-2 py-1 rounded hover:bg-red-50">Delete</button>
+        <div class="dog-actions">
+          <button @click="openModal(dog.id)" class="btn-manage">Manage</button>
+          <button @click="deleteDog(dog.id)" class="btn-delete">Delete</button>
         </div>
       </div>
       
-      <div v-if="dogs.length === 0" class="col-span-full text-center py-8 text-gray-400 bg-white rounded border border-dashed border-gray-300">
+      <div v-if="dogs.length === 0" class="empty-state">
         No dogs added yet.
       </div>
     </div>
@@ -70,7 +70,6 @@ const selectedDogId = ref(null)
 
 const dogs = computed(() => dogStore.getDogsByOwner(props.ownerEmail))
 
-// Fetch dogs when email changes or component mounts
 watch(() => props.ownerEmail, async (newVal) => {
   if (newVal) {
     loading.value = true
@@ -90,3 +89,179 @@ const deleteDog = async (id) => {
   }
 }
 </script>
+
+<style scoped>
+.dog-manager {
+  background-color: #f9fafb;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  padding: 1.5rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1f2937;
+}
+
+.dm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.icon { font-size: 1.5rem; }
+
+.dm-header h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: #1f2937;
+}
+
+.btn-add {
+  background-color: #4f46e5;
+  color: white;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.btn-add:hover { background-color: #4338ca; }
+
+.loading {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.dogs-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.dog-card {
+  background: white;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  border: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dog-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.badge-neutered {
+  font-size: 0.65rem;
+  background-color: #dbeafe;
+  color: #1e40af;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.dog-meta {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+.dog-born {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 0.25rem;
+}
+
+.dog-stats {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.stat {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 0.25rem;
+  border-width: 1px;
+  border-style: solid;
+}
+
+.stat-green {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.stat-red {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.stat-gray {
+  background-color: #f9fafb;
+  border-color: #e5e7eb;
+  color: #4b5563;
+}
+
+.dog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.btn-manage, .btn-delete {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: white;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-manage {
+  border: 1px solid #c7d2fe;
+  color: #4f46e5;
+}
+.btn-manage:hover { background-color: #e0e7ff; }
+
+.btn-delete {
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+.btn-delete:hover { background-color: #fef2f2; }
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2rem;
+  color: #9ca3af;
+  background-color: white;
+  border: 1px dashed #d1d5db;
+  border-radius: 0.25rem;
+}
+
+@media (min-width: 768px) {
+  .dogs-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+</style>

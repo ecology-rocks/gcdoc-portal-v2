@@ -1,121 +1,119 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+  <div v-if="isOpen" class="modal-backdrop">
+    <div class="modal-card">
       
-      <div class="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-lg">
-        <h3 class="font-bold text-lg text-gray-800">
+      <div class="modal-header">
+        <h3>
           {{ dogId ? `Manage ${form.name}` : 'Add New Dog' }}
         </h3>
-        <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 text-xl">×</button>
+        <button @click="$emit('close')" class="close-btn">×</button>
       </div>
 
-      <div v-if="dogId" class="flex border-b">
+      <div v-if="dogId" class="tabs">
         <button 
           v-for="tab in ['Info', 'Vaccinations', 'Notes']" 
           :key="tab"
           @click="activeTab = tab"
-          class="flex-1 py-3 text-sm font-medium border-b-2 transition-colors"
-          :class="activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
+          class="tab-btn"
+          :class="{ active: activeTab === tab }"
         >
           {{ tab }}
         </button>
       </div>
 
-      <div class="p-6 overflow-y-auto flex-1">
+      <div class="modal-body">
         
-        <div v-if="activeTab === 'Info'" class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Name</label>
-              <input v-model="form.name" class="w-full border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none">
+        <div v-if="activeTab === 'Info'" class="tab-content">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Name</label>
+              <input v-model="form.name" class="input">
             </div>
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Breed</label>
-              <input v-model="form.breed" class="w-full border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none">
+            <div class="form-group">
+              <label>Breed</label>
+              <input v-model="form.breed" class="input">
             </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Birthdate</label>
-              <input v-model="form.birthdate" type="date" class="w-full border p-2 rounded focus:ring-2 focus:ring-indigo-500 outline-none">
+            <div class="form-group">
+              <label>Birthdate</label>
+              <input v-model="form.birthdate" type="date" class="input">
             </div>
-            <div>
-              <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Sex</label>
-              <select v-model="form.sex" class="w-full border p-2 rounded bg-white">
+            <div class="form-group">
+              <label>Sex</label>
+              <select v-model="form.sex" class="input">
                 <option value="M">Male</option>
                 <option value="F">Female</option>
                 <option value="U">Unknown</option>
               </select>
             </div>
           </div>
-          <div class="flex items-center gap-2 pt-2">
-            <input v-model="form.neutered" type="checkbox" id="neutered" class="w-4 h-4 text-indigo-600 rounded">
-            <label for="neutered" class="text-sm text-gray-700">Neutered / Spayed</label>
+          <div class="checkbox-group">
+            <input v-model="form.neutered" type="checkbox" id="neutered">
+            <label for="neutered">Neutered / Spayed</label>
           </div>
         </div>
 
-        <div v-if="activeTab === 'Vaccinations'" class="space-y-6">
-          <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
-            <p class="text-sm text-blue-700">
-              <span class="font-bold">Date Given:</span> When administered.<br>
-              <span class="font-bold">Date Due:</span> Expiration or next booster.
+        <div v-if="activeTab === 'Vaccinations'" class="tab-content">
+          <div class="info-box">
+            <p>
+              <strong>Date Given:</strong> When administered.<br>
+              <strong>Date Due:</strong> Expiration or next booster.
             </p>
           </div>
 
-          <div class="bg-gray-50 p-4 rounded border border-gray-200 space-y-3">
-            <h4 class="text-xs font-bold text-gray-800 uppercase">Add Record</h4>
-            <div class="grid grid-cols-3 gap-2">
-              <input v-model="newVax.name" placeholder="Vaccine Name" class="border rounded p-2 text-sm col-span-3 sm:col-span-1">
-              <div class="col-span-3 sm:col-span-2 flex gap-2">
-                <input v-model="newVax.dateGiven" type="date" class="border rounded p-2 text-sm flex-1">
-                <input v-model="newVax.dateDue" type="date" class="border rounded p-2 text-sm flex-1">
-                <button @click="handleAddVax" class="bg-blue-600 text-white px-3 py-2 rounded font-bold text-sm">Add</button>
+          <div class="add-box">
+            <h4>Add Record</h4>
+            <div class="add-grid">
+              <input v-model="newVax.name" placeholder="Vaccine Name" class="input col-full">
+              <div class="date-row">
+                <input v-model="newVax.dateGiven" type="date" class="input">
+                <input v-model="newVax.dateDue" type="date" class="input">
+                <button @click="handleAddVax" class="btn-add">Add</button>
               </div>
             </div>
           </div>
 
-          <div class="space-y-2">
-            <div v-for="vax in currentDog?.vaccinations" :key="vax.id" class="flex justify-between items-center p-3 bg-white border rounded">
+          <div class="record-list">
+            <div v-for="vax in currentDog?.vaccinations" :key="vax.id" class="record-item">
               <div>
-                <div class="font-bold text-gray-800">{{ vax.name }}</div>
-                <div class="text-xs text-gray-500">
-                  Given: {{ vax.dateGiven }} | Due: <span :class="isOverdue(vax.dateDue) ? 'text-red-600 font-bold' : 'text-green-600'">{{ vax.dateDue }}</span>
+                <div class="record-title">{{ vax.name }}</div>
+                <div class="record-meta">
+                  Given: {{ vax.dateGiven }} | Due: <span :class="{ overdue: isOverdue(vax.dateDue) }">{{ vax.dateDue }}</span>
                 </div>
               </div>
-              <button @click="handleDeleteVax(vax.id)" class="text-red-400 hover:text-red-600 font-bold px-2">✕</button>
+              <button @click="handleDeleteVax(vax.id)" class="btn-remove">✕</button>
             </div>
-             <div v-if="!currentDog?.vaccinations?.length" class="text-center text-sm text-gray-400 italic py-4">
+             <div v-if="!currentDog?.vaccinations?.length" class="empty-text">
               No vaccination records found.
             </div>
           </div>
         </div>
 
-        <div v-if="activeTab === 'Notes'" class="space-y-6">
-          <div class="flex gap-2">
-            <textarea v-model="newNoteText" placeholder="Add a note..." class="flex-1 border rounded p-2 text-sm" rows="2"></textarea>
-            <button @click="handleAddNote" class="bg-indigo-600 text-white px-4 rounded font-bold">Post</button>
+        <div v-if="activeTab === 'Notes'" class="tab-content">
+          <div class="note-input">
+            <textarea v-model="newNoteText" placeholder="Add a note..." rows="2"></textarea>
+            <button @click="handleAddNote" class="btn-post">Post</button>
           </div>
-          <div class="space-y-4">
-            <div v-for="note in sortedNotes" :key="note.id" class="bg-gray-50 p-3 rounded border border-gray-200">
-              <div class="flex justify-between items-start mb-1">
-                <span class="text-xs font-bold text-indigo-600">{{ note.author }}</span>
-                <div class="flex items-center gap-2">
-                  <span class="text-[10px] text-gray-400">{{ formatNoteDate(note) }}</span>
-                  <button @click="handleDeleteNote(note.id)" class="text-gray-400 hover:text-red-600 text-xs">✕</button>
+          <div class="note-list">
+            <div v-for="note in sortedNotes" :key="note.id" class="note-item">
+              <div class="note-header">
+                <span class="note-author">{{ note.author }}</span>
+                <div class="note-actions">
+                  <span class="note-date">{{ formatNoteDate(note) }}</span>
+                  <button @click="handleDeleteNote(note.id)" class="btn-remove-note">✕</button>
                 </div>
               </div>
-              <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ note.text }}</p>
+              <p class="note-text">{{ note.text }}</p>
             </div>
-            <div v-if="!currentDog?.notes?.length" class="text-center text-sm text-gray-400 italic py-4">
+            <div v-if="!currentDog?.notes?.length" class="empty-text">
               No notes yet.
             </div>
           </div>
         </div>
       </div>
 
-      <div class="p-4 border-t bg-gray-50 flex justify-end gap-2 rounded-b-lg">
-        <button @click="$emit('close')" class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Close</button>
-        <button v-if="activeTab === 'Info'" @click="saveInfo" class="px-4 py-2 bg-green-600 text-white rounded font-bold hover:bg-green-700 text-sm">
+      <div class="modal-footer">
+        <button @click="$emit('close')" class="btn-close">Close</button>
+        <button v-if="activeTab === 'Info'" @click="saveInfo" class="btn-save">
           Save Dog Info
         </button>
       </div>
@@ -129,22 +127,19 @@ import { useDogStore } from '@/stores/dogStore'
 
 const props = defineProps({
   isOpen: Boolean,
-  dogId: String,    // If editing existing
-  ownerEmail: String, // If creating new
-  initialTab: { type: String, default: 'Info' } // [NEW] Default tab
+  dogId: String,
+  ownerEmail: String,
+  initialTab: { type: String, default: 'Info' }
 })
 
 const emit = defineEmits(['close'])
-
 const dogStore = useDogStore()
 const activeTab = ref('Info')
 
-// Form State
 const form = reactive({ name: '', breed: '', sex: 'U', birthdate: '', neutered: false })
 const newVax = reactive({ name: '', dateGiven: '', dateDue: '' })
 const newNoteText = ref('')
 
-// Helpers
 const currentDog = computed(() => dogStore.getDogById(props.dogId))
 
 const sortedNotes = computed(() => {
@@ -165,13 +160,10 @@ const formatNoteDate = (note) => {
 
 const isOverdue = (dateStr) => dateStr && new Date(dateStr) < new Date()
 
-// Initialize Form
 watch(() => props.isOpen, (val) => {
   if (val) {
-    activeTab.value = props.initialTab // [UPDATED] Respect initialTab prop
-    
+    activeTab.value = props.initialTab
     if (props.dogId && currentDog.value) {
-      // Edit Mode
       Object.assign(form, {
         name: currentDog.value.name,
         breed: currentDog.value.breed,
@@ -180,22 +172,19 @@ watch(() => props.isOpen, (val) => {
         neutered: !!currentDog.value.neutered
       })
     } else {
-      // Create Mode
       Object.assign(form, { name: '', breed: '', sex: 'U', birthdate: '', neutered: false })
     }
   }
 })
 
-// Actions
 const saveInfo = async () => {
   if (!form.name) return alert("Name is required")
   const payload = { ...form, ownerId: props.ownerEmail }
-
   if (props.dogId) {
     await dogStore.updateDog(props.dogId, payload)
   } else {
     await dogStore.addDog(payload)
-    emit('close') // Close on create
+    emit('close')
   }
 }
 
@@ -219,3 +208,273 @@ const handleDeleteNote = async (id) => {
   if(confirm("Delete note?")) await dogStore.deleteNote(props.dogId, id)
 }
 </script>
+
+<style scoped>
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+  backdrop-filter: blur(2px);
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1f2937;
+}
+
+.modal-card {
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.modal-header {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #9ca3af;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.75rem;
+  background: white;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.tab-btn:hover { color: #374151; }
+.tab-btn.active { border-bottom-color: #4f46e5; color: #4f46e5; }
+
+/* Body */
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Forms */
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Vax Tab */
+.info-box {
+  background-color: #eff6ff;
+  border-left: 4px solid #60a5fa;
+  padding: 1rem;
+}
+.info-box p { margin: 0; font-size: 0.875rem; color: #1d4ed8; }
+
+.add-box {
+  background-color: #f9fafb;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+}
+
+.add-box h4 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #1f2937;
+  margin: 0 0 0.5rem 0;
+}
+
+.add-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.date-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-add {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.record-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+}
+
+.record-title { font-weight: 700; font-size: 0.875rem; color: #1f2937; }
+.record-meta { font-size: 0.75rem; color: #6b7280; }
+.overdue { color: #dc2626; font-weight: 700; }
+
+.btn-remove { color: #f87171; background: none; border: none; font-weight: 700; cursor: pointer; }
+.btn-remove:hover { color: #dc2626; }
+
+/* Notes Tab */
+.note-input {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.note-input textarea {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+.btn-post {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  padding: 0 1rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.note-list { display: flex; flex-direction: column; gap: 1rem; }
+
+.note-item {
+  background-color: #f9fafb;
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+}
+
+.note-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.note-author { font-size: 0.75rem; font-weight: 700; color: #4f46e5; }
+.note-actions { display: flex; align-items: center; gap: 0.5rem; }
+.note-date { font-size: 0.65rem; color: #9ca3af; }
+.btn-remove-note { background: none; border: none; color: #9ca3af; font-size: 0.75rem; cursor: pointer; }
+
+.note-text { margin: 0; font-size: 0.875rem; color: #1f2937; white-space: pre-wrap; }
+
+.empty-text { text-align: center; color: #9ca3af; font-style: italic; font-size: 0.875rem; }
+
+/* Footer */
+.modal-footer {
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  color: #4b5563;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.btn-save {
+  background-color: #16a34a;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.btn-save:hover { background-color: #15803d; }
+</style>
