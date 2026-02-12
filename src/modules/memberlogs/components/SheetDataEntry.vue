@@ -29,7 +29,8 @@
             <th>Member</th>
             <th>Date</th>
             <th>Activity</th>
-            <th style="width: 60px">Hrs</th>
+            <th style="width: 150px">Type</th>
+            <th style="width: 60px">Hrs (Clock)</th>
             <th style="width: 30px"></th>
           </tr>
         </thead>
@@ -39,7 +40,16 @@
             <td><MemberSelect v-model="row.MemberEmail" @update:modelValue="markDirty" /></td>
             <td><input v-model="row.Date" type="date" @input="markDirty"></td>
             <td><input v-model="row.Activity" type="text" @input="markDirty"></td>
-            <td><input v-model="row.Hours" type="number" step="0.25" @input="markDirty"></td>
+            <td>
+              <select v-model="row.type" @change="markDirty">
+                <option value="Regular">Normal</option>
+                <option value="Cleaning / Maintenance">Maintenance/Cleaning (2x)</option>
+                <option value="Trial Setup / Tear Down">Trial Set Up / Tear Down (2x)</option>
+              </select>
+            </td>
+            <td>
+               <input v-model="row.clockHours" type="number" step="0.25" @input="markDirty">
+            </td>
             <td><button @click="deleteRow(idx)" class="del-btn">×</button></td>
           </tr>
         </tbody>
@@ -76,17 +86,20 @@ watch(() => props.sheet, async (newSheet) => {
     MemberEmail: l.MemberEmail,
     Date: new Date(l.Date.toDate()).toISOString().split('T')[0],
     Activity: l.Activity,
-    Hours: l.Hours,
+    // Use stored clockHours if available, otherwise assume Hours was clock time
+    clockHours: l.clockHours || l.Hours || 0, 
     type: l.type || 'Regular',
     isExisting: true
   }))
   
-  addRow()
+  // If no rows, add a blank one
+  if (rows.value.length === 0) addRow()
 }, { immediate: true })
 
 const addRow = () => {
   const lastDate = rows.value.length > 0 ? rows.value[rows.value.length-1].Date : new Date().toISOString().split('T')[0]
-  rows.value.push({ MemberEmail: '', Date: lastDate, Activity: '', Hours: 0, type: 'Regular' })
+  // Initialize with clockHours
+  rows.value.push({ MemberEmail: '', Date: lastDate, Activity: '', clockHours: 0, type: 'Regular' })
 }
 
 const markDirty = () => hasUnsavedChanges.value = true
@@ -107,6 +120,7 @@ const saveChanges = async () => {
   const toCreate = rows.value.filter(r => !r.id && r.MemberEmail)
   const toUpdate = rows.value.filter(r => r.id && r.MemberEmail)
   
+  // This now calls the updated batchSave which handles the multiplier logic
   await logsStore.batchSave(toCreate, toUpdate, props.sheet.shortId)
   
   const totalCount = logsStore.getLogsBySheet(props.sheet.shortId).length + toCreate.length
@@ -218,7 +232,7 @@ tr.existing {
   background-color: #f0f9ff;
 }
 
-input {
+input, select {
   width: 100%;
   padding: 0.25rem 0.5rem;
   border: 1px solid #d1d5db;

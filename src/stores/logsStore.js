@@ -76,10 +76,6 @@ export const useLogsStore = defineStore("logs", {
       });
       return hoursMap;
     },
-
-    getLogsBySheet: (state) => (sheetShortId) => {
-      return state.logs.filter((l) => l.SourceSheet == sheetShortId);
-    },
   },
 
   actions: {
@@ -165,12 +161,31 @@ export const useLogsStore = defineStore("logs", {
     async batchSave(newLogs, updatedLogs, sheetId) {
       const batch = writeBatch(db);
 
+      // Helper to calculate hours
+      const prepareLogData = (log) => {
+        const rawHours = Number(log.clockHours) || 0;
+        const type = log.type || "Regular";
+        let multiplier = 1;
+
+        if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
+          multiplier = 2;
+        }
+
+        return {
+          ...log,
+          Hours: rawHours * multiplier, // Calculated Credit
+          clockHours: rawHours,         // Actual Time
+          Date: Timestamp.fromDate(new Date(log.Date)),
+        };
+      };
+
       // 1. Handle New Logs
       newLogs.forEach((log) => {
         const docRef = doc(collection(db, "logs"));
+        const finalData = prepareLogData(log);
+        
         batch.set(docRef, {
-          ...log,
-          Date: Timestamp.fromDate(new Date(log.Date)),
+          ...finalData,
           SourceSheet: sheetId,
           Status: "approved",
           FiscalYearRollover: "No",
@@ -180,12 +195,10 @@ export const useLogsStore = defineStore("logs", {
       // 2. Handle Updates
       updatedLogs.forEach((log) => {
         const docRef = doc(db, "logs", log.id);
-        const updateData = {
-          ...log,
-          Date: Timestamp.fromDate(new Date(log.Date)),
-        };
-        delete updateData.id;
-        batch.update(docRef, updateData);
+        const finalData = prepareLogData(log);
+        delete finalData.id; // Don't save ID inside doc
+        
+        batch.update(docRef, finalData);
       });
 
       await batch.commit();
