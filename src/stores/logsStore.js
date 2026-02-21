@@ -178,6 +178,51 @@ export const useLogsStore = defineStore("logs", {
       });
     },
 
+    async cleanLegacyTypes() {
+    const q = query(collection(db, "logs"))
+    const snapshot = await getDocs(q)
+    
+    let batch = writeBatch(db)
+    let count = 0
+    let totalUpdated = 0
+
+    // Use the getter to fetch the "One True String" for each type
+    const TARGETS = {
+      MAINT: this.logType('MAINT'),
+      SETUP: this.logType('SETUP'),
+      STANDARD: this.logType('STANDARD')
+    }
+
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data()
+      const current = (data.type || '').toLowerCase()
+      let target = TARGETS.STANDARD
+
+      // Lazy matching logic
+      if (current.includes('cleaning') || current.includes('maint')) {
+        target = TARGETS.MAINT
+      } else if (current.includes('trial') || current.includes('setup')) {
+        target = TARGETS.SETUP
+      } 
+
+      // Only update if it doesn't match the standardized string
+      if (data.type !== target) {
+        batch.update(doc(db, "logs", docSnap.id), { type: target })
+        count++
+        totalUpdated++
+      }
+
+      if (count >= 400) {
+        await batch.commit()
+        batch = writeBatch(db)
+        count = 0
+      }
+    }
+
+    if (count > 0) await batch.commit()
+    return totalUpdated
+  },
+
     async addLog(logData) {
       const status = logData.Status || "approved";
       await addDoc(collection(db, "logs"), {

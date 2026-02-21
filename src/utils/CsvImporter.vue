@@ -18,6 +18,23 @@
     </div>
 
     <div class="tool-grid">
+      <div v-if="activeTab === 'logs'" class="tool-card">
+        <h2 class="card-title">
+          <span>🧹</span> Data Hygiene
+        </h2>
+        <p class="card-desc">
+          Scan all existing logs and update their "Type" to match the new standardized format 
+          (Standard, Cleaning, Trial Setup).
+        </p>
+        <button 
+          @click="runCleaner" 
+          :disabled="uploading"
+          class="btn-import"
+          style="background-color: #d97706;" 
+        >
+          {{ uploading ? 'Scrubbing...' : 'Normalize Log Types' }}
+        </button>
+      </div>
       <div class="tool-card">
         <h2 class="card-title">
           <span>📥</span> Import {{ activeTab }}
@@ -122,6 +139,22 @@ const parseCsv = (event) => {
       parsing.value = false
     }
   })
+}
+
+const runCleaner = async () => {
+  if (!confirm("This will standardize the 'Type' field for ALL logs based on keywords. Continue?")) return
+  
+  uploading.value = true
+  try {
+    // We access the logs store via your 'stores' object
+    const count = await stores.logs.cleanLegacyTypes()
+    alert(`Success! Standardized ${count} records.`)
+  } catch (e) {
+    console.error(e)
+    errorLog.value.push("Cleanup Error: " + e.message)
+  } finally {
+    uploading.value = false
+  }
 }
 
 const processImport = async () => {
