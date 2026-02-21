@@ -85,6 +85,24 @@
           </div>
         </div>
 
+
+        <div v-if="authStore.isAdmin" class="card card-dark">
+          <div class="card-body">
+            <div class="card-icon dark-bg">
+              <span>🔄</span>
+            </div>
+            <div class="card-info">
+              <dt>Website Sync</dt>
+              <dd>WordPress Tools</dd>
+            </div>
+          </div>
+          <div class="card-footer">
+            <RouterLink to="/wordpress" class="link-dark">
+              Run Sync Tool &rarr;
+            </RouterLink>
+          </div>
+        </div>
+
         <div v-if="authStore.isRegistrar" class="card card-green">
           <div class="card-body">
             <div class="card-icon green-bg">
@@ -312,4 +330,9 @@ const teacherClassCount = computed(() => {
 .card-green { border-left-color: #22c55e; }
 .green-bg { background-color: #f0fdf4; color: #22c55e; }
 .link-green { color: #16a34a; }
+
+.card-dark { border-left-color: #1f2937; }
+.dark-bg { background-color: #f3f4f6; color: #1f2937; }
+.link-dark { color: #111827; }
+.link-dark:hover { color: #000; }
 </style>

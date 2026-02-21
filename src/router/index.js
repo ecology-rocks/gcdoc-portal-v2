@@ -13,6 +13,7 @@ import ClassDashboard from '@/modules/classes/ClassDashboard.vue'
 import KioskView from '@/views/KioskView.vue'
 import AttendanceSheet from '@/modules/admin/AttendanceSheet.vue'
 import Dashboard from '@/modules/dashboard/Dashboard.vue'
+import WordPressSync from '@/modules/admin/WordPressSync.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,6 +36,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: 'dashboard', name: 'dashboard', component: Dashboard },
+        { path: 'wordpress', name: 'wp-sync', component: WordPressSync },
         { path: 'logs', name: 'logs', component: LogManager },
         { path: 'meeting', name: 'meeting', component: MeetingView },
         { path: 'import', name: 'import', component: CsvImporter },
