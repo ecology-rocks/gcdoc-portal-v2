@@ -114,22 +114,20 @@ const selectSport = (s) => {
 const submitLog = async () => {
   submitting.value = true
   
-  // Logic matches KioskView logic
-  const clock = parseFloat(form.hours)
+  const clock = parseFloat(form.hours) || 0
   let credit = clock
-  let typeString = "Standard / Regular (1x)"
+  // Use the store helper to fetch the correct string for the category
+  const typeString = logsStore.logType(form.category)
   let act = form.notes || ''
 
+  // Apply multiplier logic based on the category
   if (form.category === 'MAINT') {
-    typeString = "Cleaning / Maintenance (2x + Blue Ribbon)"
     act = act || 'Cleaning / Maintenance'
     credit = clock * 2
   } else if (form.category === 'SETUP') {
-    typeString = "Trial Setup / Teardown (2x)"
     act = act || `Trial Setup - ${form.sport}`
     credit = clock * 2
   } else {
-    // Standard text generation
     if (form.category === 'PRACTICE') act = `Practices - ${form.sport} ${act}`
     if (form.category === 'ADMIN') act = `Meetings and Admin ${act}`
   }
@@ -143,7 +141,7 @@ const submitLog = async () => {
     Activity: act,
     type: typeString,
     Sport: form.sport,
-    Status: 'pending', // Requires approval since it's self-reported
+    Status: 'pending',
     SourceSheet: 'member-portal'
   }
 

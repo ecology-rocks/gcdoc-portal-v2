@@ -105,7 +105,7 @@
 
     <div class="kiosk-footer">
       <RouterLink to="/login" class="admin-link">
-        Admin Access
+        Member Login
       </RouterLink>
     </div>
 
@@ -158,15 +158,26 @@ const selectCategory = (cat) => {
 const selectSport = (s) => { form.sport = s; step.value = 4 }
 
 const getLogData = () => {
-  let type = TYPES.STANDARD
+  // Use the store to fetch the standardized string
+  const type = logsStore.logType(form.category)
   let act = ''
   
   switch(form.category) {
-    case 'MAINT': type = TYPES.MAINT; act = 'Cleaning / Maintenance'; break
-    case 'SETUP': type = TYPES.SETUP; act = `Trial Setup - ${form.sport}`; break
-    case 'PRACTICE': type = TYPES.STANDARD; act = `Practices - ${form.sport}`; break
-    case 'ADMIN': type = TYPES.STANDARD; act = 'Meetings and Admin'; break
-    case 'OTHER': type = TYPES.STANDARD; act = 'Other Volunteer Work'; break
+    case 'MAINT': 
+      act = 'Cleaning / Maintenance'
+      break
+    case 'SETUP': 
+      act = `Trial Setup - ${form.sport}`
+      break
+    case 'PRACTICE': 
+      act = `Practices - ${form.sport}`
+      break
+    case 'ADMIN': 
+      act = 'Meetings and Admin'
+      break
+    case 'OTHER': 
+      act = 'Other Volunteer Work'
+      break
   }
 
   return {
@@ -187,9 +198,14 @@ const doCheckIn = async () => {
 const doManualEntry = async () => {
   const data = getLogData()
   data.Date = new Date()
-  const clock = parseFloat(manualHours.value)
+  
+  const clock = parseFloat(manualHours.value) || 0
   let credited = clock
-  if (data.type === TYPES.MAINT || data.type === TYPES.SETUP) { credited = clock * 2 }
+
+  // Compare against store strings to apply the multiplier
+  if (data.type === logsStore.logType('MAINT') || data.type === logsStore.logType('SETUP')) {
+    credited = clock * 2
+  }
 
   data.clockHours = clock
   data.Hours = credited

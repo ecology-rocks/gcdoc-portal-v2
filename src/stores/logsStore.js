@@ -21,6 +21,17 @@ export const useLogsStore = defineStore("logs", {
   }),
 
   getters: {
+    logType: (state) => (val) => {
+      const TYPES = {
+        MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
+        STANDARD: "Standard / Regular (1x)",
+        SETUP: "Trial Setup / Teardown (2x)",
+      };
+      if (val === TYPES.MAINT || val === "MAINT") return TYPES.MAINT;
+      if (val === TYPES.SETUP || val === "SETUP") return TYPES.SETUP;
+      return TYPES.STANDARD;
+    },
+
     // 1. All-Time Total
     totalHoursByMember: (state) => {
       const hoursMap = {};
@@ -35,18 +46,18 @@ export const useLogsStore = defineStore("logs", {
 
     activeSessions: (state) => {
       return state.logs
-        .filter(l => l.Status === 'active')
-        .sort((a, b) => b.Date?.seconds - a.Date?.seconds)
+        .filter((l) => l.Status === "active")
+        .sort((a, b) => b.Date?.seconds - a.Date?.seconds);
     },
 
     pendingLogs: (state) => {
       return state.logs
-        .filter(l => l.Status === 'pending')
-        .sort((a, b) => b.Date?.seconds - a.Date?.seconds)
+        .filter((l) => l.Status === "pending")
+        .sort((a, b) => b.Date?.seconds - a.Date?.seconds);
     },
-    
+
     getLogsBySheet: (state) => (sheetShortId) => {
-      return state.logs.filter(l => l.SourceSheet == sheetShortId)
+      return state.logs.filter((l) => l.SourceSheet == sheetShortId);
     },
 
     // 2. Fiscal Year Total (Oct 1 - Sept 30)
@@ -76,7 +87,7 @@ export const useLogsStore = defineStore("logs", {
     vouchersByMember: (state) => {
       const hoursMap = state.fiscalYearHours;
       const voucherMap = {};
-      
+
       for (const email in hoursMap) {
         const hrs = hoursMap[email];
         if (hrs < 50) {
@@ -105,7 +116,10 @@ export const useLogsStore = defineStore("logs", {
           const type = log.type || "";
           const clock = Number(log.clockHours) || 0;
 
-          if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
+          if (
+            type.includes("Cleaning / Maintenance") ||
+            type.includes("Trial Setup")
+          ) {
             if (!hoursMap[email]) hoursMap[email] = 0;
             hoursMap[email] += clock;
           }
@@ -146,7 +160,7 @@ export const useLogsStore = defineStore("logs", {
         voucherMap[email] = Math.round(hoursMap[email] / 8);
       }
       return voucherMap;
-    }
+    },
   },
 
   actions: {
@@ -165,60 +179,63 @@ export const useLogsStore = defineStore("logs", {
     },
 
     async addLog(logData) {
-      const status = logData.Status || 'approved'
-      await addDoc(collection(db, 'logs'), {
+      const status = logData.Status || "approved";
+      await addDoc(collection(db, "logs"), {
         ...logData,
         Date: Timestamp.fromDate(new Date(logData.Date)),
         Status: status,
-        FiscalYearRollover: 'No'
-      })
+        FiscalYearRollover: "No",
+      });
     },
 
     async checkIn(logData) {
-      await addDoc(collection(db, 'logs'), {
+      await addDoc(collection(db, "logs"), {
         ...logData,
-        Date: Timestamp.now(), 
-        Status: 'active',
-        Hours: 0, 
-        FiscalYearRollover: 'No'
-      })
+        Date: Timestamp.now(),
+        Status: "active",
+        Hours: 0,
+        FiscalYearRollover: "No",
+      });
     },
 
     async checkOut(logId, startTimeSeconds) {
-      const start = new Date(startTimeSeconds * 1000)
-      const now = new Date()
-      const diffMs = now - start
-      
-      let realHours = Math.max(0.25, (diffMs / 3600000))
-      realHours = Math.round(realHours * 100) / 100
+      const start = new Date(startTimeSeconds * 1000);
+      const now = new Date();
+      const diffMs = now - start;
 
-      const logRef = doc(db, 'logs', logId)
-      const logSnap = await getDoc(logRef)
-      if (!logSnap.exists()) throw new Error("Log not found")
-      
-      const logData = logSnap.data()
-      const type = logData.type || "Standard / Regular (1x)"
+      let realHours = Math.max(0.25, diffMs / 3600000);
+      realHours = Math.round(realHours * 100) / 100;
 
-      let multiplier = 1
-      if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
-        multiplier = 2
+      const logRef = doc(db, "logs", logId);
+      const logSnap = await getDoc(logRef);
+      if (!logSnap.exists()) throw new Error("Log not found");
+
+      const logData = logSnap.data();
+      const type = logData.type || "Standard / Regular (1x)";
+
+      let multiplier = 1;
+      if (
+        type.includes("Cleaning / Maintenance") ||
+        type.includes("Trial Setup")
+      ) {
+        multiplier = 2;
       }
 
-      const creditedHours = realHours * multiplier
+      const creditedHours = realHours * multiplier;
 
       await updateDoc(logRef, {
-        Hours: creditedHours,      
-        clockHours: realHours,     
-        Status: 'pending'          
-      })
+        Hours: creditedHours,
+        clockHours: realHours,
+        Status: "pending",
+      });
     },
 
     async updateLog(id, updates) {
-      const data = { ...updates }
+      const data = { ...updates };
       if (data.Date && !(data.Date instanceof Timestamp)) {
-        data.Date = Timestamp.fromDate(new Date(data.Date))
+        data.Date = Timestamp.fromDate(new Date(data.Date));
       }
-      await updateDoc(doc(db, 'logs', id), data)
+      await updateDoc(doc(db, "logs", id), data);
     },
 
     async batchSave(newLogs, updatedLogs, sheetId) {
@@ -226,10 +243,13 @@ export const useLogsStore = defineStore("logs", {
 
       const prepareLogData = (log) => {
         const rawHours = Number(log.clockHours) || 0;
-        const type = log.type || "Regular";
+        const type = log.type || "Standard / Regular (1x)";
         let multiplier = 1;
 
-        if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
+        if (
+          type.includes("Cleaning / Maintenance") ||
+          type.includes("Trial Setup")
+        ) {
           multiplier = 2;
         }
 
@@ -255,7 +275,7 @@ export const useLogsStore = defineStore("logs", {
       updatedLogs.forEach((log) => {
         const docRef = doc(db, "logs", log.id);
         const finalData = prepareLogData(log);
-        delete finalData.id; 
+        delete finalData.id;
         batch.update(docRef, finalData);
       });
 
@@ -297,7 +317,9 @@ export const useLogsStore = defineStore("logs", {
         if (email) {
           const hours = parseFloat(row["Hours"]) || 0;
           const clockHours = parseFloat(row["clockHours"]) || hours;
-          const importedAt = row["importedAt"] ? new Date(row["importedAt"]) : new Date();
+          const importedAt = row["importedAt"]
+            ? new Date(row["importedAt"])
+            : new Date();
           const dateObj = row["Date"] ? new Date(row["Date"]) : new Date();
 
           let isMaint = false;
@@ -313,11 +335,13 @@ export const useLogsStore = defineStore("logs", {
             return (
               l.MemberEmail?.toLowerCase() === email.toLowerCase() &&
               lDateStr === rowDateStr &&
-              Math.abs((l.Hours || 0) - hours) < 0.01 
+              Math.abs((l.Hours || 0) - hours) < 0.01
             );
           });
 
-          const docRef = match ? doc(db, "logs", match.id) : doc(collection(db, "logs"));
+          const docRef = match
+            ? doc(db, "logs", match.id)
+            : doc(collection(db, "logs"));
 
           batch.set(
             docRef,

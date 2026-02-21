@@ -40,9 +40,9 @@
 
         <select v-model="filters.type" class="input-control type-select">
           <option value="all">All Types</option>
-          <option :value="TYPES.STANDARD">Standard</option>
-          <option :value="TYPES.SETUP">Trial Setup</option>
-          <option :value="TYPES.MAINT">Maintenance</option>
+          <option :value="logType('STANDARD')">Standard</option>
+          <option :value="logType('SETUP')">Trial Setup</option>
+          <option :value="logType('MAINT')">Maintenance</option>
         </select>
 
         <input v-model="filters.startDate" type="date" class="input-control date-box"
@@ -79,7 +79,7 @@
               <div class="activity-cell">
                 <span class="activity-text">{{ log.Activity }}</span>
                 <span class="type-tag" :class="getTypeClass(log.type)">
-                  {{ log.type || TYPES.STANDARD }}
+                  {{ log.type || logType('STANDARD') }}
                 </span>
               </div>
             </td>
@@ -124,9 +124,9 @@
       <div class="w-1/2">
         <label>Type (Category)</label>
         <select v-model="editForm.type" class="input-control w-full">
-          <option :value="TYPES.STANDARD">Standard</option>
-          <option :value="TYPES.MAINT">Maintenance</option>
-          <option :value="TYPES.SETUP">Trial Setup</option>
+          <option :value="logType('STANDARD')">Standard</option>
+          <option :value="logType('MAINT')">Maintenance</option>
+          <option :value="logType('SETUP')">Trial Setup</option>
         </select>
       </div>
     </div>
@@ -146,12 +146,7 @@ import { useMembersStore } from '@/stores/membersStore'
 
 const logsStore = useLogsStore()
 const memberStore = useMembersStore()
-
-const TYPES = {
-  MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
-  STANDARD: "Standard / Regular (1x)",
-  SETUP: "Trial Setup / Teardown (2x)"
-}
+const logType = logsStore.logType;
 
 const filters = reactive({
   search: '',
@@ -166,7 +161,7 @@ const editForm = reactive({
   id: '',
   Activity: '',
   Hours: 0,
-  type: TYPES.STANDARD,
+  type: logType('STANDARD'),
   Sport: ''
 })
 
@@ -174,16 +169,29 @@ const openEdit = (log) => {
   editingLog.value = log
   editForm.id = log.id
   editForm.Activity = log.Activity
-  editForm.Hours = log.Hours
-  // Ensure we fallback to Standard if type is missing, but prefer existing type
-  editForm.type = log.type || TYPES.STANDARD
+  // Initialize with clockHours (actual time) so user edits base hours
+  editForm.Hours = log.clockHours || log.Hours 
+  editForm.type = log.type || logType('STANDARD')
   editForm.Sport = log.Sport || ''
 }
 
 const saveEdit = async () => {
+  const type = editForm.type || logType('STANDARD');
+  let multiplier = 1;
+
+  // Check if the type qualifies for double time
+  if (type === logType('MAINT') || type === logType('SETUP')) {
+    multiplier = 2;
+  }
+
+  // Treat the entered value as base Clock Hours
+  const enteredHours = parseFloat(editForm.Hours) || 0;
+  const creditedHours = enteredHours * multiplier;
+
   await logsStore.updateLog(editForm.id, {
     Activity: editForm.Activity,
-    Hours: editForm.Hours,
+    Hours: creditedHours,      // Credited time (doubled if applicable)
+    clockHours: enteredHours,  // Actual base time
     type: editForm.type,
     Sport: editForm.Sport
   })
@@ -272,14 +280,14 @@ const formatDate = (ts) => {
 }
 
 const getNormalizedType = (type) => {
-  if (!type || type === '') return TYPES.STANDARD
+  if (!type || type === '') return logType('STANDARD')
   return type
 }
 
 const getTypeClass = (type) => {
   const t = getNormalizedType(type)
-  if (t === TYPES.MAINT) return 'maintenance'
-  if (t === TYPES.SETUP) return 'setup'
+  if (t === logType('MAINT')) return 'maintenance'
+  if (t === logType('SETUP')) return 'setup'
   return 'standard'
 }
 
@@ -333,8 +341,8 @@ const stats = computed(() => {
     const h = Number(l.Hours) || 0
     const t = getNormalizedType(l.type)
     s.totalHours += h
-    if (t === TYPES.MAINT) s.maintenance += h
-    if (t === TYPES.SETUP) s.setup += h
+    if (t === logType('MAINT')) s.maintenance += h
+    if (t === logType('SETUP')) s.setup += h
   })
 
   s.totalHours = parseFloat(s.totalHours.toFixed(2))

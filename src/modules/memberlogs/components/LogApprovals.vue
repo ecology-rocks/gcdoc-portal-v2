@@ -64,9 +64,9 @@
           <div class="col">
             <label>Type</label>
             <select v-model="editForm.type" class="form-input">
-              <option :value="TYPES.STANDARD">Standard</option>
-              <option :value="TYPES.MAINT">Maintenance</option>
-              <option :value="TYPES.SETUP">Trial Setup</option>
+              <option :value="logType('STANDARD')">Standard</option>
+              <option :value="logType('MAINT')">Maintenance</option>
+              <option :value="logType('SETUP')">Trial Setup</option>
             </select>
           </div>
         </div>
@@ -87,14 +87,10 @@ import { useLogsStore } from '@/stores/logsStore'
 const logsStore = useLogsStore()
 const pendingLogs = computed(() => logsStore.pendingLogs)
 
-const TYPES = {
-  MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
-  STANDARD: "Standard / Regular (1x)",
-  SETUP: "Trial Setup / Teardown (2x)"
-}
+const logType = logsStore.logType
 
 const editingLog = ref(null)
-const editForm = reactive({ id: '', Activity: '', Hours: 0, type: TYPES.STANDARD, Sport: '' })
+const editForm = reactive({ id: '', Activity: '', Hours: 0, type: logType('STANDARD'), Sport: '' })
 
 const approve = async (log) => await logsStore.updateLog(log.id, { Status: 'approved' })
 const reject = async (id) => {
@@ -105,13 +101,30 @@ const openEdit = (log) => {
   editingLog.value = log
   editForm.id = log.id
   editForm.Activity = log.Activity
-  editForm.Hours = log.Hours
-  editForm.type = log.type || TYPES.STANDARD
+  // Initialize with clockHours (actual time) so admin edits base hours
+  editForm.Hours = log.clockHours || log.Hours
+  editForm.type = log.type || logType('STANDARD')
   editForm.Sport = log.Sport || ''
 }
 
 const saveEdit = async () => {
-  await logsStore.updateLog(editForm.id, { ...editForm })
+  const type = editForm.type
+  let multiplier = 1
+
+  if (type === logType('MAINT') || type === logType('SETUP')) {
+    multiplier = 2
+  }
+
+  const enteredHours = parseFloat(editForm.Hours) || 0
+  const creditedHours = enteredHours * multiplier
+
+  await logsStore.updateLog(editForm.id, {
+    Activity: editForm.Activity,
+    Hours: creditedHours,      // Credited time
+    clockHours: enteredHours,  // Actual base time
+    type: editForm.type,
+    Sport: editForm.Sport
+  })
   editingLog.value = null
 }
 </script>

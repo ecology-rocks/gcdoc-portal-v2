@@ -75,9 +75,9 @@ const memberStore = useMembersStore()
 
 // --- CONSTANTS ---
 const TYPES = {
-  STANDARD: "Standard / Regular (1x)",
-  SETUP: "Trial Setup / Teardown (2x)",
-  MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)"
+  STANDARD: logsStore.logType('STANDARD'),
+  SETUP: logsStore.logType('SETUP'),
+  MAINT: logsStore.logType('MAINT')
 }
 
 // --- STATE ---
