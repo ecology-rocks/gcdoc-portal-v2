@@ -66,6 +66,7 @@
       </nav>
 
       <div class="sidebar-footer">
+        <RouterLink to="/kiosk" class="footer-link">✍🏻 Go To Kiosk</RouterLink>
         <RouterLink v-if="authStore.isAdmin" to="/import" class="footer-link warning" @click="closeSidebar">
           ⚠️ Data Importer
         </RouterLink>

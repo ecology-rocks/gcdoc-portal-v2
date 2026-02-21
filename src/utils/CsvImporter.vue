@@ -1,90 +1,75 @@
 <template>
-  <div class="p-6 max-w-6xl mx-auto">
-    <div class="mb-8">
-      <h1 class="text-2xl font-bold text-gray-800">Data Tools</h1>
-      <p class="text-gray-500">Import and Export club data via CSV.</p>
+  <div class="importer-container">
+    <div class="importer-header">
+      <h1>Data Tools</h1>
+      <p>Import and Export club data via CSV.</p>
     </div>
 
-    <div class="flex space-x-2 border-b border-gray-200 mb-6">
+    <div class="tab-list">
       <button 
         v-for="tab in tabs" 
         :key="tab"
         @click="activeTab = tab"
-        class="px-4 py-2 text-sm font-medium capitalize transition-colors"
-        :class="activeTab === tab ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'"
+        class="tab-btn"
+        :class="{ active: activeTab === tab }"
       >
         {{ tab }}
       </button>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-      
-      <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
-        <h2 class="font-bold text-lg mb-4 flex items-center gap-2 capitalize">
+    <div class="tool-grid">
+      <div class="tool-card">
+        <h2 class="card-title">
           <span>📥</span> Import {{ activeTab }}
         </h2>
         
-        <div class="mb-4 text-xs text-gray-500 bg-gray-50 p-3 rounded font-mono">
-          <p class="font-bold mb-1 text-gray-700">Expected Columns:</p>
-          
-          <div v-if="activeTab === 'members'">
-            Email, FirstName, LastName, Role, Phone1, Address...
-          </div>
-          
-          <div v-if="activeTab === 'logs'">
-            MemberEmail, Date, Hours, Activity, isMaintenance...
-          </div>
-          
-          <div v-if="activeTab === 'dogs'">
-            Name, OwnerEmail, Breed, Sex (M/F), Birthdate (YYYY-MM-DD), Neutered (Yes/No)
-          </div>
-          
-          <div v-if="activeTab === 'classes'">
-            Name, Year, Session, Day, Time, Location, Teachers (emails), Students (emails)
-          </div>
+        <div class="format-help">
+          <p class="help-label">Expected Columns:</p>
+          <div v-if="activeTab === 'members'">Email, FirstName, LastName, Role, Phone1, Address...</div>
+          <div v-if="activeTab === 'logs'">MemberEmail, Date, Hours, Activity, isMaintenance...</div>
+          <div v-if="activeTab === 'dogs'">Name, OwnerEmail, Breed, Sex (M/F), Birthdate (YYYY-MM-DD), Neutered (Yes/No)</div>
+          <div v-if="activeTab === 'classes'">Name, Year, Session, Day, Time, Location, Teachers (emails), Students (emails)</div>
         </div>
 
         <input 
           type="file" 
           accept=".csv" 
           @change="parseCsv"
-          class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+          class="file-input"
         >
         
-        <div v-if="parsedData.length > 0" class="mt-4 space-y-3">
-          <p class="text-sm font-bold text-green-600">
-            {{ parsedData.length }} records ready.
-          </p>
+        <div v-if="parsedData.length > 0" class="import-actions">
+          <p class="ready-msg">{{ parsedData.length }} records ready.</p>
           <button 
             @click="processImport" 
             :disabled="uploading"
-            class="w-full bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            class="btn-import"
           >
             {{ uploading ? `Processing...` : 'Start Import' }}
           </button>
         </div>
       </div>
 
-      <div class="bg-white p-6 rounded-lg shadow border border-gray-200">
-        <h2 class="font-bold text-lg mb-4 flex items-center gap-2 capitalize">
+      <div class="tool-card">
+        <h2 class="card-title">
           <span>📤</span> Export {{ activeTab }}
         </h2>
-        <p class="text-sm text-gray-500 mb-6">
+        <p class="card-desc">
           Download a full CSV of all {{ activeTab }} currently in the database.
         </p>
         <button 
           @click="processExport" 
           :disabled="uploading"
-          class="w-full border border-indigo-600 text-indigo-600 py-2 rounded font-bold hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+          class="btn-export"
         >
           Download CSV
         </button>
       </div>
     </div>
 
-    <div v-if="errorLog.length > 0" class="mt-8 bg-red-50 p-4 rounded border border-red-200">
-      <h3 class="font-bold text-red-800 mb-2">Errors</h3>
-      <div class="max-h-60 overflow-y-auto text-xs font-mono text-red-600">
+    <div v-if="errorLog.length > 0" class="error-section">
+      <h3>Errors</h3>
+      <div class="error-list">
         <div v-for="(err, i) in errorLog" :key="i">{{ err }}</div>
       </div>
     </div>
@@ -106,7 +91,6 @@ const uploading = ref(false)
 const parsedData = ref([])
 const errorLog = ref([])
 
-// Stores
 const stores = {
   members: useMembersStore(),
   logs: useLogsStore(),
@@ -143,8 +127,6 @@ const parseCsv = (event) => {
 const processImport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]
-  
-  // Chunking for Firestore
   const chunkSize = 400 
   const chunks = []
   for (let i = 0; i < parsedData.value.length; i += chunkSize) {
@@ -159,13 +141,9 @@ const processImport = async () => {
     }
     alert(`${activeTab.value} Import Complete! Imported ${total} records.`)
     parsedData.value = []
-    
-    // Refresh the store view if applicable
     if (currentStore.initClasses) await currentStore.initClasses()
     if (currentStore.initMembers) await currentStore.initMembers()
-    
   } catch (e) {
-    console.error(e)
     errorLog.value.push(e.message)
   }
   uploading.value = false
@@ -174,7 +152,6 @@ const processImport = async () => {
 const processExport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]
-  
   try {
     const data = await currentStore.getExportData()
     if (!data || data.length === 0) {
@@ -182,7 +159,6 @@ const processExport = async () => {
       uploading.value = false
       return
     }
-
     const csv = Papa.unparse(data)
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -193,9 +169,142 @@ const processExport = async () => {
     link.click()
     document.body.removeChild(link)
   } catch (e) {
-    console.error(e)
     errorLog.value.push("Export Failed: " + e.message)
   }
   uploading.value = false
 }
 </script>
+
+<style scoped>
+.importer-container {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.importer-header { margin-bottom: 2rem; }
+.importer-header h1 { font-size: 1.5rem; font-weight: 700; color: #1f2937; margin: 0; }
+.importer-header p { color: #6b7280; margin: 0.25rem 0 0; }
+
+.tab-list {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  text-transform: capitalize;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-btn.active {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .tool-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.tool-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-transform: capitalize;
+}
+
+.format-help {
+  background-color: #f9fafb;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+
+.help-label { font-weight: 700; color: #374151; margin-bottom: 0.25rem; }
+
+.file-input {
+  width: 100%;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.file-input::-webkit-file-upload-button {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 1rem;
+}
+
+.import-actions { margin-top: 1.5rem; }
+.ready-msg { font-size: 0.875rem; font-weight: 700; color: #16a34a; margin-bottom: 0.75rem; }
+
+.btn-import {
+  width: 100%;
+  background-color: #4f46e5;
+  color: white;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-import:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card-desc { font-size: 0.875rem; color: #6b7280; margin-bottom: 1.5rem; }
+
+.btn-export {
+  width: 100%;
+  background: white;
+  border: 1px solid #4f46e5;
+  color: #4f46e5;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.error-section {
+  margin-top: 2rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 1rem;
+  border-radius: 0.5rem;
+}
+
+.error-section h3 { color: #b91c1c; font-size: 1rem; margin-top: 0; }
+.error-list { font-family: monospace; font-size: 0.75rem; color: #dc2626; max-height: 200px; overflow-y: auto; }
+</style>

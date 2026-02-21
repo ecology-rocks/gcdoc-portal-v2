@@ -96,7 +96,7 @@
             </td>
             <td>
               <button @click="openEdit(log)" class="action-btn">✏️</button>
-              <button @click="confirmDelete(log.id)" class="action-btn text-red-600">🗑️</button>
+              <button @click="confirmDelete(log.id)" class="action-btn delete">🗑️</button>
             </td>
           </tr>
           <tr v-if="filteredLogs.length === 0">
@@ -111,10 +111,10 @@
     <h3>Edit Log Entry</h3>
     
     <label>Activity Description</label>
-    <input v-model="editForm.Activity" class="input-control w-full mb-2" />
+    <input v-model="editForm.Activity" class="input-control w-full" />
 
     <label>Sport</label>
-    <input v-model="editForm.Sport" class="input-control w-full mb-2" placeholder="e.g. Agility" />
+    <input v-model="editForm.Sport" class="input-control w-full" placeholder="e.g. Agility" />
     
     <div class="flex gap-2 mb-2">
       <div class="w-1/2">
@@ -634,4 +634,9 @@ tr:hover {
 .modal-content { background: white; padding: 2rem; border-radius: 0.5rem; width: 500px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
 .btn-save { background: #4f46e5; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; }
 .btn-cancel { background: #e5e7eb; color: #374151; padding: 0.5rem 1rem; border-radius: 0.25rem; }
+.action-btn.delete { color: #dc2626; }
+.modal-form-row { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
+.form-col { flex: 1; }
+.form-col label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+.input-control.w-full { width: 100%; box-sizing: border-box; }
 </style>
