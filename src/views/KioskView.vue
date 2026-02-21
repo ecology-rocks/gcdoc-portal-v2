@@ -102,6 +102,13 @@
       </div>
     </div>
 
+
+    <div class="kiosk-footer">
+      <RouterLink to="/login" class="admin-link">
+        Admin Access
+      </RouterLink>
+    </div>
+
   </div>
 </template>
 
@@ -516,5 +523,30 @@ onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
   .active-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+.kiosk-footer {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  z-index: 10;
+}
+
+.admin-link {
+  color: #64748b; /* Slate-500: Subtle and low contrast */
+  font-size: 0.875rem;
+  text-decoration: none;
+  font-weight: 500;
+  opacity: 0.6;
+  transition: all 0.2s;
+  padding: 0.5rem 1rem;
+}
+
+.admin-link:hover {
+  color: #cbd5e1; /* Slate-300: Lighter on hover */
+  opacity: 1;
+  text-decoration: underline;
 }
 </style>

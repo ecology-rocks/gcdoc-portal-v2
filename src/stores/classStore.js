@@ -28,29 +28,49 @@ export const useClassStore = defineStore('classes', {
       return [current - 1, current, current + 1, current + 2, current + 3]
     },
 
+    // Updated: Returns classes where user is Teacher OR Student
     myClasses: (state) => {
       const auth = useAuthStore()
       if (!auth.user?.email) return []
 
+      // Admin sees ALL classes in their dashboard views
       if (auth.profile?.isAdmin) {
         return state.classes
       }
 
-      return state.classes.filter(c => 
-        c.teachers && c.teachers.includes(auth.user.email.toLowerCase())
-      )
+      const myEmail = auth.user.email.toLowerCase()
+      
+      return state.classes.filter(c => {
+        const isTeacher = c.teachers && c.teachers.includes(myEmail)
+        const isStudent = c.students && c.students.some(s => s.email.toLowerCase() === myEmail)
+        return isTeacher || isStudent
+      })
     },
     
+    // Helper to check role for a specific class
+    isTeacherOf: (state) => (classId) => {
+      const auth = useAuthStore()
+      if (auth.profile?.isAdmin) return true // Admin acts as teacher
+      const cls = state.classes.find(c => c.id === classId)
+      return cls?.teachers?.includes(auth.user?.email?.toLowerCase())
+    },
+
+    isStudentOf: (state) => (classId) => {
+      const auth = useAuthStore()
+      const cls = state.classes.find(c => c.id === classId)
+      return cls?.students?.some(s => s.email.toLowerCase() === auth.user?.email?.toLowerCase())
+    },
+
     isTeacher: (state) => {
       const auth = useAuthStore()
       if (auth.profile?.isAdmin) return true
-      return state.myClasses.length > 0
+      // Check if they teach ANY class
+      return state.classes.some(c => c.teachers?.includes(auth.user?.email?.toLowerCase()))
     }
   },
 
   actions: {
     async initClasses() {
-      // Always fetch fresh to ensure we have the latest list for deduplication
       this.loading = true
       const q = query(collection(db, 'classes'))
       const snap = await getDocs(q)
@@ -102,9 +122,7 @@ export const useClassStore = defineStore('classes', {
       this.classes = this.classes.filter(c => c.id !== id)
     },
 
-    // --- IMPORT/EXPORT ---
     async importGenericRows(rows) {
-      // 1. Ensure we have the latest data to check against
       if (this.classes.length === 0) {
         await this.initClasses()
       }
@@ -118,15 +136,12 @@ export const useClassStore = defineStore('classes', {
           const year = parseInt(row['Year']) || new Date().getFullYear()
           const session = row['Session']?.trim() || ''
 
-          // 2. CHECK FOR DUPLICATES
-          // We define a "Unique Class" as matching Name + Year + Session
           const existingClass = this.classes.find(c => 
             c.name.toLowerCase() === name.toLowerCase() && 
             c.year === year &&
             c.session.toLowerCase() === session.toLowerCase()
           )
 
-          // 3. If exists, update that ID. If not, create new ID.
           const docRef = existingClass 
             ? doc(db, 'classes', existingClass.id)
             : doc(collection(db, 'classes'))
@@ -137,7 +152,6 @@ export const useClassStore = defineStore('classes', {
           const studentObjects = studentEmails.map(email => ({ email: email, name: email }))
 
           const payload = {
-            // If it's new, we set ID. If existing, this is ignored by Firestore but harmless.
             id: docRef.id, 
             name: name,
             session: session,
@@ -147,19 +161,15 @@ export const useClassStore = defineStore('classes', {
             location: row['Location'] || '',
             teachers: teacherEmails,
             students: studentObjects,
-            // Only set createdAt if it's a new record
             ...(existingClass ? {} : { createdAt: Timestamp.now() })
           }
 
-          // 'merge: true' ensures we update fields without wiping the doc if we missed something
           batch.set(docRef, payload, { merge: true })
           count++
         }
       })
       
       await batch.commit()
-      
-      // Refresh local state to reflect updates
       await this.initClasses()
       return count
     },

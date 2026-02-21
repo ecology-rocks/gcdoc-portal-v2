@@ -5,6 +5,11 @@
       <div class="header-left">
         <h1>Meeting Prep</h1>
         <p class="subtitle">Overview for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} General Meeting</p>
+        <div class="header-actions">
+          <button class="btn-primary" @click="$router.push({ name: 'attendance' })">
+            📄 View Attendance Sheet
+          </button>
+        </div>
       </div>
       <div class="header-right">
         <div class="big-number highlight">{{ membersStore.votingMembers.length }}</div>
@@ -523,5 +528,28 @@ const totalActualHoursFY = computed(() => {
   .content-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* [NEW STYLES] */
+.header-actions {
+  margin-top: 1rem;
+}
+
+.btn-primary {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #4338ca;
 }
 </style>

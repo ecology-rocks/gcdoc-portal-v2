@@ -24,7 +24,7 @@ export const useMembersStore = defineStore('members', {
     // Filter for Voting Members (Regular or Lifetime)
     votingMembers: (state) => {
       return state.members.filter(m => 
-        ['Regular', 'Lifetime'].includes(m.MembershipType) && 
+        ['Regular', 'Lifetime', 'Family'].includes(m.MembershipType) && 
         m.Role !== 'inactive'
       )
     }

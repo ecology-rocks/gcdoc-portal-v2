@@ -11,6 +11,8 @@ import MeetingView from '@/modules/admin/MeetingView.vue'
 import RegistrarView from '@/modules/admin/RegistrarView.vue' // [NEW IMPORT]
 import ClassDashboard from '@/modules/classes/ClassDashboard.vue'
 import KioskView from '@/views/KioskView.vue'
+import AttendanceSheet from '@/modules/admin/AttendanceSheet.vue'
+import Dashboard from '@/modules/dashboard/Dashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -32,11 +34,11 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { requiresAuth: true },
       children: [
-        { path: 'dashboard', name: 'dashboard', component: LogManager },
+        { path: 'dashboard', name: 'dashboard', component: Dashboard },
         { path: 'logs', name: 'logs', component: LogManager },
         { path: 'meeting', name: 'meeting', component: MeetingView },
         { path: 'import', name: 'import', component: CsvImporter },
-        
+        { path: 'meeting/attendance', name: 'attendance', component: AttendanceSheet },
         // Registrar / Classes
         { path: 'registrar', name: 'registrar', component: RegistrarView }, // [NEW ROUTE]
         { path: 'classes', name: 'classes', component: ClassDashboard },
@@ -67,7 +69,7 @@ router.beforeEach(async (to, from, next) => {
   if (authStore.loading) await authStore.init()
 
   if (to.meta.requiresAuth && !authStore.user) {
-    next('/login')
+    next('/kiosk')
   } else if (to.path === '/login' && authStore.user) {
     next('/')
   } else {

@@ -12,11 +12,21 @@
     </div>
 
     <div class="filter-bar">
-      <span class="filter-label">Filter:</span>
-      <select v-model="filterYear" class="filter-select">
-        <option :value="null">All Years</option>
-        <option v-for="y in classStore.availableYears" :key="y" :value="y">{{ y }}</option>
-      </select>
+      <div class="filter-group">
+        <span class="filter-label">Year:</span>
+        <select v-model="filterYear" class="filter-select">
+          <option :value="null">All Years</option>
+          <option v-for="y in classStore.availableYears" :key="y" :value="y">{{ y }}</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Session:</span>
+        <select v-model="filterSession" class="filter-select">
+          <option value="">All Sessions</option>
+          <option v-for="s in classStore.sessions" :key="s" :value="s">{{ s }}</option>
+        </select>
+      </div>
     </div>
 
     <div v-if="classStore.loading" class="loading-state">Loading classes...</div>
@@ -68,7 +78,6 @@
         </div>
         
         <div class="modal-body">
-          
           <div class="form-grid">
             <div class="form-group col-full sm-col-half">
               <label>Class Name</label>
@@ -139,7 +148,6 @@
               </span>
             </div>
           </div>
-
         </div>
 
         <div class="modal-footer">
@@ -166,7 +174,10 @@ const membersStore = useMembersStore()
 const showModal = ref(false)
 const isEditing = ref(false)
 const editingId = ref(null)
+
+// Filters
 const filterYear = ref(new Date().getFullYear())
+const filterSession = ref('') // [NEW]
 
 const pendingTeacherEmail = ref('')
 const pendingStudentEmail = ref('')
@@ -189,13 +200,22 @@ onMounted(async () => {
 
 const filteredClasses = computed(() => {
   let list = classStore.classes
+  
+  // [UPDATED] Filter Logic
   if (filterYear.value) {
     list = list.filter(c => c.year === filterYear.value)
   }
-  return list.sort((a, b) => a.session.localeCompare(b.session))
+  if (filterSession.value) {
+    list = list.filter(c => c.session === filterSession.value)
+  }
+
+  return list.sort((a, b) => {
+    // Sort by Year desc, then Session asc
+    if (b.year !== a.year) return b.year - a.year
+    return a.session.localeCompare(b.session)
+  })
 })
 
-// --- ACTIONS ---
 const openModal = (cls = null) => {
   pendingTeacherEmail.value = ''
   pendingStudentEmail.value = ''
@@ -249,7 +269,6 @@ const handleDelete = async (id) => {
   }
 }
 
-// --- HELPERS ---
 const getMemberName = (email) => {
   const m = membersStore.getMemberByEmail(email)
   return m ? `${m.FirstName} ${m.LastName}` : email
@@ -301,7 +320,7 @@ const removeStudent = (email) => {
   margin: 0 auto;
 }
 
-/* --- Header --- */
+/* Header */
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -338,16 +357,22 @@ const removeStudent = (email) => {
 }
 .btn-primary:hover { background-color: #4338ca; }
 
-/* --- Filter Bar --- */
+/* Filter Bar */
 .filter-bar {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
   background-color: #f9fafb;
   padding: 0.75rem;
   border-radius: 0.375rem;
   border: 1px solid #e5e7eb;
   margin-bottom: 1rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .filter-label {
@@ -365,7 +390,7 @@ const removeStudent = (email) => {
   background-color: white;
 }
 
-/* --- Class List Cards --- */
+/* Cards */
 .class-list {
   display: grid;
   grid-template-columns: 1fr;
@@ -400,8 +425,8 @@ const removeStudent = (email) => {
 
 .session-badge {
   font-size: 0.75rem;
-  background-color: #e0e7ff; /* Indigo 100 */
-  color: #4338ca; /* Indigo 700 */
+  background-color: #e0e7ff; 
+  color: #4338ca;
   padding: 2px 6px;
   border-radius: 4px;
   font-weight: 700;
@@ -431,7 +456,7 @@ const removeStudent = (email) => {
   padding: 0.5rem;
   background-color: #f9fafb;
   border-radius: 0.375rem;
-  display: flex; /* Mobile: side by side */
+  display: flex; 
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -485,7 +510,7 @@ const removeStudent = (email) => {
   font-style: italic;
 }
 
-/* --- Modal Styles --- */
+/* Modal */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -565,7 +590,6 @@ const removeStudent = (email) => {
   background-color: white;
 }
 
-/* Sections for Tag inputs */
 .form-section {
   margin-bottom: 1rem;
 }
@@ -645,9 +669,7 @@ const removeStudent = (email) => {
 }
 .btn-cancel:hover { color: #1f2937; }
 
-/* --- Breakpoints --- */
 @media (min-width: 640px) {
-  /* Grid classes for modal form */
   .form-grid {
     grid-template-columns: repeat(12, 1fr);
   }
@@ -656,7 +678,6 @@ const removeStudent = (email) => {
   .sm-col-half { grid-column: span 6; }
   .sm-col-quarter { grid-column: span 3; }
   
-  /* Class List Desktop View */
   .class-card {
     flex-direction: row;
     align-items: center;
@@ -666,7 +687,7 @@ const removeStudent = (email) => {
     border-left: 1px solid #e5e7eb;
     border-right: 1px solid #e5e7eb;
     background: transparent;
-    display: block; /* Stack vertically on desktop */
+    display: block; 
     padding: 0 1.5rem;
     min-width: 100px;
   }

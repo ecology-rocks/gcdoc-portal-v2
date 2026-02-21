@@ -13,7 +13,6 @@
     "test:unit": "vitest"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.1.18",
     "firebase": "^12.8.0",
     "papaparse": "^5.5.3",
     "pinia": "^3.0.4",

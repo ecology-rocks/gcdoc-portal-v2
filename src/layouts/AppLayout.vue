@@ -39,30 +39,34 @@
           <span class="label">Dashboard</span>
         </RouterLink>
 
-        <div class="nav-divider">Teacher Tools</div>
+        <div v-if="classStore.isTeacher" class="nav-divider">Teacher Tools</div>
         
         <RouterLink v-if="classStore.isTeacher" to="/classes" class="nav-item" active-class="active" @click="closeSidebar">
           <span class="icon">🎓</span> My Classes
         </RouterLink>
-        <RouterLink to="/registrar" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">📋</span> Registrar
+
+        <div v-if="authStore.isRegistrar" class="nav-divider">Registrar</div>
+        <RouterLink v-if="authStore.isRegistrar" to="/registrar" class="nav-item" active-class="active" @click="closeSidebar">
+          <span class="icon">📋</span> Registration
         </RouterLink>
 
-        <div class="nav-divider">Admin Tools</div>
+        <div v-if="authStore.isAdmin" class="nav-divider">Admin Tools</div>
 
-        <RouterLink to="/meeting" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">📅</span> Meeting Prep
-        </RouterLink>
-        <RouterLink to="/logs" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">📝</span> Logs & Sheets
-        </RouterLink>
-        <RouterLink to="/members" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">👥</span> Members
-        </RouterLink>
+        <template v-if="authStore.isAdmin">
+          <RouterLink to="/meeting" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">📅</span> Meeting Prep
+          </RouterLink>
+          <RouterLink to="/logs" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">📝</span> Logs & Sheets
+          </RouterLink>
+          <RouterLink to="/members" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">👥</span> Members
+          </RouterLink>
+        </template>
       </nav>
 
       <div class="sidebar-footer">
-        <RouterLink to="/import" class="footer-link warning" @click="closeSidebar">
+        <RouterLink v-if="authStore.isAdmin" to="/import" class="footer-link warning" @click="closeSidebar">
           ⚠️ Data Importer
         </RouterLink>
         <button @click="handleLogout" class="footer-link">
@@ -76,7 +80,7 @@
         <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen">
           ☰
         </button>
-        <h2>{{ currentRouteName }}</h2>
+        
       </header>
 
       <div class="content-area">
@@ -104,14 +108,6 @@ const closeSidebar = () => {
   sidebarOpen.value = false
 }
 
-const currentRouteName = computed(() => {
-  if (route.name === 'dashboard') return 'Dashboard'
-  if (route.name === 'logs') return 'Log Manager'
-  if (route.name === 'meeting') return 'Meeting Prep'
-  if (route.name === 'import') return 'Data Tools'
-  return ''
-})
-
 const getInitials = (profile) => {
   if (!profile) return '?'
   const f = profile.FirstName ? profile.FirstName[0] : ''
@@ -125,15 +121,34 @@ const handleLogout = async () => {
 }
 </script>
 
+<style>
+@media print {
+  /* Critical: Reset the outer containers so content can flow across pages */
+  html, body, #app {
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+  }
+
+  /* Hide the scrollbars from the print view */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+</style>
+
 <style scoped>
 /* --- Layout Variables --- */
 :root {
   --sidebar-width: 260px;
   --header-height: 60px;
   --bg-color: #f3f4f6;
-  --sidebar-bg: #0f172a; /* Slate 900 */
-  --sidebar-text: #cbd5e1; /* Slate 300 */
-  --primary-color: #4f46e5; /* Indigo 600 */
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #cbd5e1;
+  --primary-color: #4f46e5;
 }
 
 /* --- Main Layout Container --- */
@@ -394,18 +409,42 @@ const handleLogout = async () => {
 
   /* Remove top bar padding/margin shifts if needed */
   .top-bar {
-    padding: 1rem 2rem;
+    padding: 0;
   }
 }
 
-/* --- Print Styles --- */
+/* --- PRINT OVERRIDES (Updated) --- */
 @media print {
-  .sidebar, .top-bar {
-    display: none;
+  /* 1. Hide Interface Elements */
+  .sidebar, 
+  .top-bar, 
+  .sidebar-overlay,
+  .hamburger-btn,
+  .sidebar-footer,
+  .nav-item {
+    display: none !important;
   }
+
+  /* 2. Unwrap the Layout */
+  .app-layout,
+  .main-content,
   .content-area {
-    padding: 0;
-    overflow: visible;
+    display: block !important;
+    position: static !important;
+    height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: white !important;
+  }
+
+  /* 3. Ensure Text Contrast */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color: black !important;
+    box-shadow: none !important;
   }
 }
 </style>
