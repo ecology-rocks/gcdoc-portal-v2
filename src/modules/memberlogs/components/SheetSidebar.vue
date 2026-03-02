@@ -27,7 +27,7 @@
         </button>
         <div v-else class="upload-box">
           <h4>Upload Image</h4>
-          <input type="file" @change="handleFileUpload" accept="image/*">
+          <input type="file" @change="handleFileUpload" accept="image/*" capture="environment">
           <div class="actions">
             <button @click="uploadSheet" :disabled="!uploadFile" class="btn-primary">Confirm</button>
             <button @click="showUpload = false" class="btn-text">Cancel</button>
@@ -108,7 +108,7 @@ const uploadSheet = async () => {
 
 <style scoped>
 .sidebar {
-  width: 350px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background: white;
@@ -116,6 +116,12 @@ const uploadSheet = async () => {
   border-radius: 0.5rem;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .sidebar {
+    width: 350px;
+  }
 }
 
 .filters {
@@ -169,10 +175,13 @@ select {
   cursor: pointer;
 }
 
-.upload-box {
-  background: #e0e7ff;
-  padding: 0.75rem;
-  border-radius: 0.375rem;
+/* Update .upload-box input to ensure it doesn't overflow */
+.upload-box input {
+  width: 100%;
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .upload-box h4 {

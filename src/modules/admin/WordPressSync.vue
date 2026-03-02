@@ -191,7 +191,8 @@ const analyzeData = (wpRows) => {
         username: row.username,
         email: row.email,
         wpum_vhours: hours,
-        wpum_dues: 0 // Default per requirements
+        wpum_dues: 0, // Default per requirements
+        Member_Type: appMember.MembershipType
       })
     } else {
       // NOT FOUND

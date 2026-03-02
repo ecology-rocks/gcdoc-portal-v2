@@ -57,7 +57,7 @@
       </div>
     </div>
 
-    <div class="table-container">
+    <div class="table-container table-responsive">
       <table>
         <thead>
           <tr>
@@ -357,7 +357,6 @@ const stats = computed(() => {
 .log-history {
   display: flex;
   flex-direction: column;
-  height: 100%;
   background: white;
 }
 
@@ -493,8 +492,9 @@ const stats = computed(() => {
 
 /* TABLE */
 .table-container {
-  flex: 1;
-  overflow-y: auto;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {

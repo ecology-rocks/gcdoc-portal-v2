@@ -53,16 +53,15 @@ const pendingCount = computed(() => logsStore.pendingLogs.length)
 .log-manager-container {
   max-width: 1280px;
   margin: 0 auto;
-  height: calc(100vh - 8rem);
   display: flex;
   flex-direction: column;
-  padding: 1rem;
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -83,18 +82,23 @@ h1 {
 
 .nav-tabs {
   display: flex;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 button {
-  padding: 0.5rem 1rem;
+  flex: 1 1 calc(50% - 0.5rem);
+  padding: 0.5rem;
   border-radius: 0.375rem;
   font-weight: 500;
+  font-size: 0.875rem;
   color: #4b5563;
   background: transparent;
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s;
+  text-align: center;
 }
 
 button:hover {
@@ -108,12 +112,18 @@ button.active {
 }
 
 .content-area {
-  flex: 1;
-  overflow: hidden;
   background: white;
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .nav-tabs {
+    flex-wrap: nowrap;
+  }
+  button {
+    flex: 0 0 auto;
+    font-size: 1rem;
+  }
 }
 </style>

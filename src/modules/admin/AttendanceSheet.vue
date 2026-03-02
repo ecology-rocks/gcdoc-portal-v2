@@ -10,34 +10,34 @@
         <h1>GCDOC Membership Meeting Attendance</h1>
         <p class="date">Date Generated: {{ currentDate }}</p>
       </div>
-
-      <table class="attendance-table">
-        <thead>
-          <tr>
-            <th class="col-name">Member Name</th>
-            <th class="col-hours">Hours (YTD)</th>
-            <th class="col-type">Type</th>
-            <th class="col-present">Present</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="member in sortedMembers" :key="member.id">
-            <td class="cell-name">
-              {{ member.LastName }}, {{ member.FirstName }}
-            </td>
-            <td class="cell-hours">
-              {{ getMemberHours(member.Email) }}
-            </td>
-            <td class="cell-type">
-              {{ formatMembershipType(member.MembershipType) }}
-            </td>
-            <td class="cell-present">
-              <div class="checkbox-box"></div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
+      <div class="table-responsive">
+        <table class="attendance-table">
+          <thead>
+            <tr>
+              <th class="col-name">Member Name</th>
+              <th class="col-hours">Hours (YTD)</th>
+              <th class="col-type">Type</th>
+              <th class="col-present">Present</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="member in sortedMembers" :key="member.id">
+              <td class="cell-name">
+                {{ member.LastName }}, {{ member.FirstName }}
+              </td>
+              <td class="cell-hours">
+                {{ getMemberHours(member.Email) }}
+              </td>
+              <td class="cell-type">
+                {{ formatMembershipType(member.MembershipType) }}
+              </td>
+              <td class="cell-present">
+                <div class="checkbox-box"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="sheet-footer">
         <p>Total Members Listed: {{ sortedMembers.length }}</p>
       </div>
@@ -74,21 +74,21 @@ const sortedMembers = computed(() => {
   // Combine Voting Members (Regular/Lifetime) and Applicants
   const voting = membersStore.votingMembers || []
   const applicants = membersStore.applicants || []
-  
+
   const combined = [...voting, ...applicants]
-  
+
   // Sort by Last Name, then First Name
   return combined.sort((a, b) => {
     const lnA = (a.LastName || '').toLowerCase()
     const lnB = (b.LastName || '').toLowerCase()
     if (lnA < lnB) return -1
     if (lnA > lnB) return 1
-    
+
     const fnA = (a.FirstName || '').toLowerCase()
     const fnB = (b.FirstName || '').toLowerCase()
     if (fnA < fnB) return -1
     if (fnA > fnB) return 1
-    
+
     return 0
   })
 })
@@ -116,7 +116,8 @@ const printSheet = () => {
 
 <style scoped>
 .attendance-sheet-container {
-  max-width: 850px; /* Standard Letter width approx */
+  max-width: 850px;
+  /* Standard Letter width approx */
   margin: 0 auto;
   padding: 2rem;
   font-family: "Times New Roman", Times, serif;
@@ -186,20 +187,42 @@ const printSheet = () => {
 }
 
 .attendance-table th {
-  background-color: #f3f3f3; /* Light gray for screen, might be white in print */
+  background-color: #f3f3f3;
+  /* Light gray for screen, might be white in print */
   font-weight: bold;
   text-align: left;
 }
 
 /* Column Widths */
-.col-name { width: 50%; }
-.col-hours { width: 15%; text-align: center; }
-.col-type { width: 15%; text-align: center; }
-.col-present { width: 20%; text-align: center; }
+.col-name {
+  width: 50%;
+}
+
+.col-hours {
+  width: 15%;
+  text-align: center;
+}
+
+.col-type {
+  width: 15%;
+  text-align: center;
+}
+
+.col-present {
+  width: 20%;
+  text-align: center;
+}
 
 /* Cell Alignment */
-.cell-hours, .cell-type { text-align: center; }
-.cell-present { padding: 0; vertical-align: middle; }
+.cell-hours,
+.cell-type {
+  text-align: center;
+}
+
+.cell-present {
+  padding: 0;
+  vertical-align: middle;
+}
 
 /* Checkbox visual for print */
 .checkbox-box {
@@ -234,10 +257,11 @@ const printSheet = () => {
   }
 
   .attendance-table th {
-    background-color: white !important; /* Save ink */
+    background-color: white !important;
+    /* Save ink */
     border-bottom: 2px solid #000;
   }
-  
+
   body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;

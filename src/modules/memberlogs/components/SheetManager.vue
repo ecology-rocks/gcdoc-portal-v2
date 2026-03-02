@@ -40,9 +40,16 @@ const refreshSheet = () => {
 <style scoped>
 .sheet-manager {
   display: flex;
+  flex-direction: column;
   height: 100%;
   gap: 1rem;
   overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .sheet-manager {
+    flex-direction: row;
+  }
 }
 
 .workspace {

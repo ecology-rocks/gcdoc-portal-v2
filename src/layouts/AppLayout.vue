@@ -155,8 +155,8 @@ const handleLogout = async () => {
 /* --- Main Layout Container --- */
 .app-layout {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  width: 100%;
   background-color: var(--bg-color);
   overflow: hidden;
   font-family: system-ui, -apple-system, sans-serif;
@@ -348,11 +348,12 @@ const handleLogout = async () => {
 
 .top-bar {
   background: white;
-  padding: 1rem 2rem;
+  padding: 0.5rem 1rem;
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
   display: flex;
   align-items: center;
   z-index: 10;
+  flex: 0 0 auto;
 }
 
 .top-bar h2 {
@@ -373,10 +374,12 @@ const handleLogout = async () => {
   color: #4b5563;
 }
 
+/* Replace .content-area */
 .content-area {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
+  padding: 1rem;
+  max-width: 100vw;
 }
 
 /* --- Mobile Overlay --- */
@@ -391,8 +394,8 @@ const handleLogout = async () => {
 /* --- DESKTOP BREAKPOINT --- */
 @media (min-width: 768px) {
   .sidebar {
-    position: static; /* Flows naturally in flex container */
-    transform: none; /* Always visible */
+    position: static; 
+    transform: none; 
     box-shadow: none;
   }
   
@@ -408,9 +411,12 @@ const handleLogout = async () => {
     display: none !important;
   }
 
-  /* Remove top bar padding/margin shifts if needed */
   .top-bar {
     padding: 0;
+  }
+
+  .content-area {
+    padding: 2rem;
   }
 }
 

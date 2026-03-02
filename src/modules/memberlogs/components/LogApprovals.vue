@@ -4,7 +4,7 @@
       <p><strong>Attention:</strong> These logs were submitted via Kiosk and require approval.</p>
     </div>
 
-    <div class="table-wrapper">
+    <div class="table-responsive">
       <table class="approvals-table">
         <thead>
           <tr>
@@ -166,4 +166,63 @@ const saveEdit = async () => {
 .modal-footer { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .btn-cancel { background: #e5e7eb; border: none; padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; }
 .btn-save { background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; }
+
+/* Add this to the bottom of your <style scoped> block */
+
+@media (max-width: 767px) {
+  .table-wrapper, .table-responsive {
+    overflow-x: hidden;
+  }
+  
+  .approvals-table thead { 
+    display: none; 
+  }
+  
+  .approvals-table, .approvals-table tbody { 
+    display: block; 
+    width: 100%; 
+  }
+  
+  .log-row { 
+    display: flex; 
+    flex-direction: column;
+    border: 1px solid #e5e7eb; 
+    border-radius: 0.5rem; 
+    margin-bottom: 1rem; 
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  
+  .log-row td { 
+    padding: 0.25rem 0; 
+    border: none; 
+    text-align: left; 
+    white-space: normal;
+  }
+  
+  /* Reorder and style the cells to look like a card */
+  .cell-member { order: 1; font-size: 1.125rem; color: #111827; padding-bottom: 0; }
+  .cell-date { order: 2; font-size: 0.875rem; color: #6b7280; padding-top: 0; }
+  .cell-activity { order: 3; margin-top: 0.5rem; }
+  
+  .cell-type { order: 4; font-size: 0.875rem; color: #4b5563; }
+  .cell-type::before { content: "Type: "; font-weight: 600; color: #6b7280; }
+  
+  .cell-hours { order: 5; font-size: 0.875rem; }
+  .cell-hours::before { content: "Hours: "; font-weight: 600; color: #6b7280; }
+  
+  .cell-actions { 
+    order: 6; 
+    margin-top: 1rem; 
+    padding-top: 1rem !important; 
+    border-top: 1px solid #e5e7eb !important; 
+    display: flex; 
+    justify-content: flex-end; 
+    gap: 0.5rem;
+  }
+  
+  .btn-approve, .btn-reject {
+    margin: 0;
+  }
+}
 </style>

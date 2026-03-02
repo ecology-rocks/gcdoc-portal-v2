@@ -53,7 +53,7 @@
           <span class="badge warning">Pending Vote</span>
         </div>
         
-        <div class="table-container">
+        <div class="table-container table-responsive">
           <table class="data-table">
             <thead>
               <tr>

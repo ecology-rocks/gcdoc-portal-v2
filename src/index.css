@@ -23,7 +23,7 @@
 body {
   margin: 0;
   padding: 0;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* 2. Use easy sizing (Border Box) for all elements */
@@ -40,4 +40,20 @@ img, video, canvas, svg {
 /* 4. Inherit fonts for form inputs */
 input, button, textarea, select {
   font: inherit;
+}
+
+/* Add to the bottom of the file */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+input, select, textarea {
+  max-width: 100%;
 }
