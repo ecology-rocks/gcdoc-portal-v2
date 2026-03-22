@@ -243,13 +243,18 @@ export const useLogsStore = defineStore("logs", {
       });
     },
 
-    async checkOut(logId, startTimeSeconds) {
+async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
       const start = new Date(startTimeSeconds * 1000);
       const now = new Date();
       const diffMs = now - start;
 
-      let realHours = Math.max(0.25, diffMs / 3600000);
-      realHours = Math.round(realHours * 100) / 100;
+      // Use the override if provided, otherwise calculate from start/now
+      let realHours = overrideClockHours !== null
+        ? parseFloat(overrideClockHours)
+        : diffMs / 3600000;
+
+      // Round to nearest quarter hour (0.25) and enforce a minimum of 0.25
+      realHours = Math.max(0.25, Math.round(realHours * 4) / 4);
 
       const logRef = doc(db, "logs", logId);
       const logSnap = await getDoc(logRef);

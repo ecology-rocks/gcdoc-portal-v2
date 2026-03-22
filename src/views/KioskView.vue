@@ -1,3 +1,175 @@
+<script setup>
+import { ref, computed, onMounted, reactive } from 'vue'
+import { useMembersStore } from '@/stores/membersStore'
+import { useLogsStore } from '@/stores/logsStore'
+
+const membersStore = useMembersStore()
+const logsStore = useLogsStore()
+
+const TYPES = {
+  MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
+  STANDARD: "Standard / Regular (1x)",
+  SETUP: "Trial Setup / Teardown (2x)"
+}
+
+const step = ref(1)
+const search = ref('')
+const selectedMember = ref(null)
+const manualHours = ref('')
+const activeSessions = computed(() => logsStore.activeSessions)
+
+const form = reactive({ category: '', sport: '' })
+const sports = ['Agility', 'Barn Hunt', 'Conformation', 'Rally', 'Obedience', 'Freestyle', 'Coursing', 'Other']
+
+const filteredMembers = computed(() => {
+  let list = membersStore.members
+  
+  if (search.value) {
+    const q = search.value.toLowerCase()
+    list = list.filter(m => 
+      m.LastName?.toLowerCase().includes(q) || 
+      m.FirstName?.toLowerCase().includes(q) ||
+      m.LastName2?.toLowerCase().includes(q) || 
+      m.FirstName2?.toLowerCase().includes(q)
+    )
+  }
+  
+  // Sort alphabetically by primary Last Name, then First Name
+  return list.sort((a, b) => {
+    const nameA = `${a.LastName || ''}${a.FirstName || ''}`.toLowerCase()
+    const nameB = `${b.LastName || ''}${b.FirstName || ''}`.toLowerCase()
+    return nameA.localeCompare(nameB)
+  })
+})
+
+const formatTime = (ts) => {
+  if (!ts) return ''
+  return ts.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+const selectMember = (m) => { selectedMember.value = m; step.value = 2 }
+
+const selectCategory = (cat) => {
+  form.category = cat
+  if (['SETUP', 'PRACTICE'].includes(cat)) { step.value = 3 } else { step.value = 4 }
+}
+
+const selectSport = (s) => { form.sport = s; step.value = 4 }
+
+const getLogData = () => {
+  // Use the store to fetch the standardized string
+  const type = logsStore.logType(form.category)
+  let act = ''
+  
+  switch(form.category) {
+    case 'MAINT': 
+      act = 'Cleaning / Maintenance'
+      break
+    case 'SETUP': 
+      act = `Trial Setup - ${form.sport}`
+      break
+    case 'PRACTICE': 
+      act = `Practices - ${form.sport}`
+      break
+    case 'ADMIN': 
+      act = 'Meetings and Admin'
+      break
+    case 'OTHER': 
+      act = 'Other Volunteer Work'
+      break
+  }
+
+  return {
+    MemberEmail: selectedMember.value.Email,
+    MemberName: `${selectedMember.value.LastName}, ${selectedMember.value.FirstName}`,
+    Activity: act,
+    type: type,
+    Sport: form.sport || '',
+    SourceSheet: 'kiosk'
+  }
+}
+
+const doCheckIn = async () => {
+  await logsStore.checkIn(getLogData())
+  resetWizard()
+}
+
+const doManualEntry = async () => {
+  const data = getLogData()
+  data.Date = new Date()
+  
+  const clock = parseFloat(manualHours.value) || 0
+  let credited = clock
+
+  // Compare against store strings to apply the multiplier
+  if (data.type === logsStore.logType('MAINT') || data.type === logsStore.logType('SETUP')) {
+    credited = clock * 2
+  }
+
+  data.clockHours = clock
+  data.Hours = credited
+  data.Status = 'pending'
+  
+  await logsStore.addLog(data)
+  alert('Hours Submitted for Approval!')
+  resetWizard()
+}
+
+const activeSignOut = ref(null)
+const signOutForm = reactive({
+  startTime: '',
+  endTime: '',
+  hours: 0
+})
+
+const formatToTimeInput = (date) => {
+  return date.toTimeString().slice(0, 5) // HH:MM
+}
+
+const calculateRoundedHours = (startStr, endStr) => {
+  if (!startStr || !endStr) return 0
+  const [sH, sM] = startStr.split(':').map(Number)
+  const [eH, eM] = endStr.split(':').map(Number)
+  
+  let diffMins = (eH * 60 + eM) - (sH * 60 + sM)
+  if (diffMins < 0) diffMins += 24 * 60 // Handle midnight crossover
+  
+  let hrs = diffMins / 60
+  return Math.max(0.25, Math.round(hrs * 4) / 4)
+}
+
+const confirmSignOut = (session) => {
+  activeSignOut.value = session
+  const startD = session.Date.toDate()
+  const endD = new Date()
+  
+  signOutForm.startTime = formatToTimeInput(startD)
+  signOutForm.endTime = formatToTimeInput(endD)
+  signOutForm.hours = calculateRoundedHours(signOutForm.startTime, signOutForm.endTime)
+}
+
+const updateSignOutHours = () => {
+  signOutForm.hours = calculateRoundedHours(signOutForm.startTime, signOutForm.endTime)
+}
+
+const submitSignOut = async () => {
+  if (!activeSignOut.value) return
+  const session = activeSignOut.value
+  await logsStore.checkOut(session.id, session.Date.seconds, signOutForm.hours)
+  activeSignOut.value = null
+}
+
+const cancelSignOut = () => {
+  activeSignOut.value = null
+}
+
+const resetWizard = () => {
+  step.value = 1; search.value = ''; selectedMember.value = null; form.category = ''; form.sport = ''; manualHours.value = ''
+}
+
+onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
+</script>
+
 <template>
   <div class="kiosk-wrapper">
     
@@ -11,19 +183,41 @@
         <label class="step-label">Who are you?</label>
         <input 
           v-model="search" 
-          placeholder="Start typing your name..." 
+          placeholder="Search by name..." 
           class="kiosk-input"
           autofocus
         />
-        <div class="list-group">
-          <button 
-            v-for="m in filteredMembers" 
-            :key="m.id" 
-            @click="selectMember(m)"
-            class="list-btn"
-          >
-            <span class="font-bold">{{ m.LastName }}</span>, {{ m.FirstName }}
-          </button>
+        
+        <div class="table-container kiosk-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Primary Member</th>
+                <th>Secondary Member</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr 
+                v-for="m in filteredMembers" 
+                :key="m.id" 
+                @click="selectMember(m)"
+                class="clickable-row"
+              >
+                <td>
+                  <span class="font-bold">{{ m.LastName }}</span>, {{ m.FirstName }}
+                </td>
+                <td>
+                  <span v-if="m.FirstName2 || m.LastName2">
+                    <span class="font-bold">{{ m.LastName2 || m.LastName }}</span>, {{ m.FirstName2 }}
+                  </span>
+                  <span v-else class="text-muted">-</span>
+                </td>
+              </tr>
+              <tr v-if="filteredMembers.length === 0">
+                <td colspan="2" class="empty-state">No members found matching that name.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -102,6 +296,33 @@
       </div>
     </div>
 
+<div v-if="activeSignOut" class="modal-overlay">
+      <div class="modal-content">
+        <h3 class="sub-header mb-2">Sign Out</h3>
+        <p class="text-center mb-4 text-indigo-900 text-lg"><strong>{{ activeSignOut.MemberName }}</strong></p>
+        
+        <div class="time-inputs">
+          <div class="input-group">
+            <label>Start Time</label>
+            <input type="time" v-model="signOutForm.startTime" @change="updateSignOutHours" class="kiosk-input" />
+          </div>
+          <div class="input-group">
+            <label>End Time</label>
+            <input type="time" v-model="signOutForm.endTime" @change="updateSignOutHours" class="kiosk-input" />
+          </div>
+        </div>
+
+        <div class="input-group mt-2">
+          <label>Total Hours (Rounded to nearest 0.25)</label>
+          <input type="number" v-model.number="signOutForm.hours" step="0.25" min="0.25" class="kiosk-input font-bold text-indigo-700 bg-indigo-50" />
+        </div>
+
+        <div class="modal-actions mt-4">
+          <button @click="submitSignOut" class="action-btn primary mt-0">Confirm Sign Out</button>
+          <button @click="cancelSignOut" class="cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <div class="kiosk-footer">
       <RouterLink to="/login" class="admin-link">
@@ -111,123 +332,6 @@
 
   </div>
 </template>
-
-<script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
-import { useMembersStore } from '@/stores/membersStore'
-import { useLogsStore } from '@/stores/logsStore'
-
-const membersStore = useMembersStore()
-const logsStore = useLogsStore()
-
-const TYPES = {
-  MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
-  STANDARD: "Standard / Regular (1x)",
-  SETUP: "Trial Setup / Teardown (2x)"
-}
-
-const step = ref(1)
-const search = ref('')
-const selectedMember = ref(null)
-const manualHours = ref('')
-const activeSessions = computed(() => logsStore.activeSessions)
-
-const form = reactive({ category: '', sport: '' })
-const sports = ['Agility', 'Barn Hunt', 'Conformation', 'Rally', 'Obedience', 'Freestyle', 'Coursing', 'Other']
-
-const filteredMembers = computed(() => {
-  if (!search.value || search.value.length < 2) return []
-  const q = search.value.toLowerCase()
-  return membersStore.members.filter(m => 
-    m.LastName.toLowerCase().includes(q) || m.FirstName.toLowerCase().includes(q)
-  ).slice(0, 5)
-})
-
-const formatTime = (ts) => {
-  if (!ts) return ''
-  return ts.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const selectMember = (m) => { selectedMember.value = m; step.value = 2 }
-
-const selectCategory = (cat) => {
-  form.category = cat
-  if (['SETUP', 'PRACTICE'].includes(cat)) { step.value = 3 } else { step.value = 4 }
-}
-
-const selectSport = (s) => { form.sport = s; step.value = 4 }
-
-const getLogData = () => {
-  // Use the store to fetch the standardized string
-  const type = logsStore.logType(form.category)
-  let act = ''
-  
-  switch(form.category) {
-    case 'MAINT': 
-      act = 'Cleaning / Maintenance'
-      break
-    case 'SETUP': 
-      act = `Trial Setup - ${form.sport}`
-      break
-    case 'PRACTICE': 
-      act = `Practices - ${form.sport}`
-      break
-    case 'ADMIN': 
-      act = 'Meetings and Admin'
-      break
-    case 'OTHER': 
-      act = 'Other Volunteer Work'
-      break
-  }
-
-  return {
-    MemberEmail: selectedMember.value.Email,
-    MemberName: `${selectedMember.value.LastName}, ${selectedMember.value.FirstName}`,
-    Activity: act,
-    type: type,
-    Sport: form.sport || '',
-    SourceSheet: 'kiosk'
-  }
-}
-
-const doCheckIn = async () => {
-  await logsStore.checkIn(getLogData())
-  resetWizard()
-}
-
-const doManualEntry = async () => {
-  const data = getLogData()
-  data.Date = new Date()
-  
-  const clock = parseFloat(manualHours.value) || 0
-  let credited = clock
-
-  // Compare against store strings to apply the multiplier
-  if (data.type === logsStore.logType('MAINT') || data.type === logsStore.logType('SETUP')) {
-    credited = clock * 2
-  }
-
-  data.clockHours = clock
-  data.Hours = credited
-  data.Status = 'pending'
-  
-  await logsStore.addLog(data)
-  alert('Hours Submitted for Approval!')
-  resetWizard()
-}
-
-const confirmSignOut = async (session) => {
-  if(confirm(`Sign out ${session.MemberName}?`)) {
-    await logsStore.checkOut(session.id, session.Date.seconds)
-  }
-}
-
-const resetWizard = () => {
-  step.value = 1; search.value = ''; selectedMember.value = null; form.category = ''; form.sport = ''; manualHours.value = ''
-}
-
-onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
-</script>
 
 <style scoped>
 .kiosk-wrapper {
@@ -565,4 +669,109 @@ onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
   opacity: 1;
   text-decoration: underline;
 }
+
+/* --- Kiosk Table --- */
+.kiosk-table {
+  max-height: 350px;
+  overflow-y: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: white;
+}
+
+.kiosk-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kiosk-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+  z-index: 1;
+}
+
+.kiosk-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1f2937;
+  font-size: 1.1rem;
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.clickable-row:hover {
+  background-color: #eff6ff;
+}
+
+.text-muted {
+  color: #94a3b8;
+}
+
+/* --- Sign Out Modal --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  background: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  width: 90%;
+  max-width: 450px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.time-inputs {
+  display: flex;
+  gap: 1rem;
+}
+
+.input-group {
+  flex: 1;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mt-0 { margin-top: 0 !important; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-4 { margin-top: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.text-center { text-align: center; }
+.text-lg { font-size: 1.125rem; }
+.text-indigo-900 { color: #312e81; }
+.text-indigo-700 { color: #4338ca; }
+.bg-indigo-50 { background-color: #eef2ff; }
 </style>
