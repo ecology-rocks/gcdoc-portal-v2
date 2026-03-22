@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
+import ActivityWizard from '@/components/shared/ActivityWizard.vue'
 
 const membersStore = useMembersStore()
 const logsStore = useLogsStore()
@@ -18,8 +19,14 @@ const selectedMember = ref(null)
 const manualHours = ref('')
 const activeSessions = computed(() => logsStore.activeSessions)
 
-const form = reactive({ category: '', sport: '' })
-const sports = ['Agility', 'Barn Hunt', 'Conformation', 'Rally', 'Obedience', 'Freestyle', 'Coursing', 'Other']
+const form = reactive({ 
+  category: '', 
+  sport: '',
+  notes: '',
+  activity: '',
+  type: ''
+})
+
 
 const filteredMembers = computed(() => {
   let list = membersStore.members
@@ -49,41 +56,22 @@ const formatTime = (ts) => {
 
 const selectMember = (m) => { selectedMember.value = m; step.value = 2 }
 
-const selectCategory = (cat) => {
-  form.category = cat
-  if (['SETUP', 'PRACTICE'].includes(cat)) { step.value = 3 } else { step.value = 4 }
+const handleActivityComplete = (data) => {
+  form.category = data.category
+  form.sport = data.sport
+  form.notes = data.notes
+  form.activity = data.activity
+  form.type = data.type
+  
+  step.value = 4
 }
 
-const selectSport = (s) => { form.sport = s; step.value = 4 }
-
 const getLogData = () => {
-  // Use the store to fetch the standardized string
-  const type = logsStore.logType(form.category)
-  let act = ''
-  
-  switch(form.category) {
-    case 'MAINT': 
-      act = 'Cleaning / Maintenance'
-      break
-    case 'SETUP': 
-      act = `Trial Setup - ${form.sport}`
-      break
-    case 'PRACTICE': 
-      act = `Practices - ${form.sport}`
-      break
-    case 'ADMIN': 
-      act = 'Meetings and Admin'
-      break
-    case 'OTHER': 
-      act = 'Other Volunteer Work'
-      break
-  }
-
   return {
     MemberEmail: selectedMember.value.Email,
     MemberName: `${selectedMember.value.LastName}, ${selectedMember.value.FirstName}`,
-    Activity: act,
-    type: type,
+    Activity: form.activity, // Pre-formatted by the Wizard
+    type: form.type,         // Pre-formatted by the Wizard
     Sport: form.sport || '',
     SourceSheet: 'kiosk'
   }
@@ -222,29 +210,7 @@ onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
       </div>
 
       <div v-if="step === 2" class="step-content">
-        <div class="greeting">
-          Hi, <strong>{{ selectedMember.FirstName }}</strong>!
-          <button @click="resetWizard" class="reset-link">(Not you?)</button>
-        </div>
-        
-        <label class="step-label">What are you doing today?</label>
-        <div class="button-grid">
-          <button @click="selectCategory('MAINT')" class="grid-btn border-orange">🧹 Cleaning / Maintenance</button>
-          <button @click="selectCategory('SETUP')" class="grid-btn border-purple">🏗️ Trial Setup / Teardown</button>
-          <button @click="selectCategory('PRACTICE')" class="grid-btn">🐕 Practices / Runthroughs</button>
-          <button @click="selectCategory('ADMIN')" class="grid-btn">📝 Admin / Meetings</button>
-          <button @click="selectCategory('OTHER')" class="grid-btn">❓ Other</button>
-        </div>
-      </div>
-
-      <div v-if="step === 3" class="step-content">
-        <button @click="step = 2" class="back-link">← Back</button>
-        <label class="step-label">Which Sport?</label>
-        <div class="button-grid two-col">
-          <button v-for="s in sports" :key="s" @click="selectSport(s)" class="grid-btn">
-            {{ s }}
-          </button>
-        </div>
+        <ActivityWizard @complete="handleActivityComplete" />
       </div>
 
       <div v-if="step === 4" class="step-content">

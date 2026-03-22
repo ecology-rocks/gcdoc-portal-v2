@@ -49,6 +49,9 @@ export const useSheetsStore = defineStore('sheets', {
     
     async updateLogCount(sheetId, count) {
         await updateDoc(doc(db, 'sheets', sheetId), { logCount: count })
-    }
+    },
+    async updateSheetRotation(sheetId, rotation) {
+      await updateDoc(doc(db, 'sheets', sheetId), { rotation })
+    },
   }
 })

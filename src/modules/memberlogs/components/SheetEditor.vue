@@ -21,7 +21,10 @@ defineEmits(['saved', 'statusChange'])
 .editor-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Lock it to the screen height minus ~80px for your top nav */
+  height: calc(100vh - 80px); 
+  /* Prevent it from getting completely squished on small laptop screens */
+  min-height: 800px; 
   overflow: hidden;
 }
 </style>

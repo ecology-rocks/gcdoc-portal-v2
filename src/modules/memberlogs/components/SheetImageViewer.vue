@@ -1,3 +1,64 @@
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useSheetsStore } from '@/stores/sheetsStore'
+const sheetsStore = useSheetsStore()
+
+const props = defineProps(['sheet'])
+
+const rotation = ref(0)
+const containerRef = ref(null)
+const containerSize = ref({ width: 0, height: 0 })
+let resizeObserver = null
+
+// Reset rotation when sheet changes
+watch(() => props.sheet, (newSheet) => {
+  rotation.value = newSheet.rotation || 0
+}, { immediate: true })
+
+onMounted(() => {
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      containerSize.value = {
+        width: entry.contentRect.width,
+        height: entry.contentRect.height
+      }
+    })
+    resizeObserver.observe(containerRef.value)
+  }
+})
+
+onUnmounted(() => {
+  if (resizeObserver) resizeObserver.disconnect()
+})
+
+const rotateLeft = async () => {
+  rotation.value -= 90
+  await sheetsStore.updateSheetRotation(props.sheet.id, rotation.value)
+}
+const rotateRight = async () => {
+  rotation.value += 90
+  await sheetsStore.updateSheetRotation(props.sheet.id, rotation.value)
+}
+
+const imageStyle = computed(() => {
+  const isRotated = rotation.value % 180 !== 0
+  const { width: cW, height: cH } = containerSize.value
+  
+  if (!cW || !cH) return { opacity: 0 } 
+
+  // 20px buffer for aesthetics
+  const buffer = 20 
+  
+  return {
+    transform: `rotate(${rotation.value}deg)`,
+    // The Core Math: If rotated, width constraint becomes container height
+    maxWidth: (isRotated ? cH : cW) - buffer + 'px',
+    maxHeight: (isRotated ? cW : cH) - buffer + 'px'
+  }
+})
+</script>
+
 <template>
   <div class="image-viewer" ref="containerRef">
     <div class="viewer-toolbar">
@@ -21,62 +82,12 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 
-const props = defineProps(['sheet'])
-
-const rotation = ref(0)
-const containerRef = ref(null)
-const containerSize = ref({ width: 0, height: 0 })
-let resizeObserver = null
-
-// Reset rotation when sheet changes
-watch(() => props.sheet.id, () => {
-  rotation.value = 0
-})
-
-onMounted(() => {
-  if (containerRef.value) {
-    resizeObserver = new ResizeObserver((entries) => {
-      const entry = entries[0]
-      containerSize.value = {
-        width: entry.contentRect.width,
-        height: entry.contentRect.height
-      }
-    })
-    resizeObserver.observe(containerRef.value)
-  }
-})
-
-onUnmounted(() => {
-  if (resizeObserver) resizeObserver.disconnect()
-})
-
-const rotateLeft = () => rotation.value -= 90
-const rotateRight = () => rotation.value += 90
-
-const imageStyle = computed(() => {
-  const isRotated = rotation.value % 180 !== 0
-  const { width: cW, height: cH } = containerSize.value
-  
-  if (!cW || !cH) return { opacity: 0 } 
-
-  // 20px buffer for aesthetics
-  const buffer = 20 
-  
-  return {
-    transform: `rotate(${rotation.value}deg)`,
-    // The Core Math: If rotated, width constraint becomes container height
-    maxWidth: (isRotated ? cH : cW) - buffer + 'px',
-    maxHeight: (isRotated ? cW : cH) - buffer + 'px'
-  }
-})
-</script>
 
 <style scoped>
 .image-viewer {
-  flex: 1; /* Takes top half */
+  flex: 1 1 auto; /* Grow to fill the top half */
+  min-height: 40vh; /* Absolute floor: never shrink smaller than 40% of the screen */
   background-color: #0f172a;
   position: relative;
   overflow: hidden;

@@ -320,6 +320,10 @@ async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
           Status: "approved",
           FiscalYearRollover: "No",
         });
+        
+        // FIX: Attach the newly generated ID back to the object 
+        // so the UI knows it has been saved and won't duplicate it.
+        log.id = docRef.id; 
       });
 
       updatedLogs.forEach((log) => {
