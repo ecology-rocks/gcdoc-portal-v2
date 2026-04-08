@@ -8,7 +8,7 @@
           <span>Show Completed</span>
         </label>
       </div>
-      
+
       <div class="date-filters">
         <select v-model="filterYear">
           <option value="all">All Years</option>
@@ -40,9 +40,9 @@
       <div v-if="filteredSheets.length === 0" class="no-results">
         No sheets found.
       </div>
-      <div 
-        v-for="sheet in filteredSheets" 
-        :key="sheet.id" 
+      <div
+        v-for="sheet in filteredSheets"
+        :key="sheet.id"
         class="sheet-item"
         :class="{ active: activeSheetId === sheet.id }"
         @click="$emit('select', sheet)"
@@ -55,7 +55,7 @@
           <span class="status-badge" :class="sheet.status">
             {{ sheet.status }}
           </span>
-          <span class="log-count">{{ sheet.logCount }} logs</span>
+          <span class="log-count">{{ getDisplayedLogCount(sheet) }} logs</span>
         </div>
       </div>
     </div>
@@ -64,11 +64,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useLogsStore } from '@/stores/logsStore'
 import { useSheetsStore } from '@/stores/sheetsStore'
 
-const props = defineProps(['activeSheetId'])
+defineProps(['activeSheetId'])
 defineEmits(['select'])
 
+const logsStore = useLogsStore()
 const sheetsStore = useSheetsStore()
 const showUpload = ref(false)
 const uploadFile = ref(null)
@@ -78,6 +80,7 @@ const filterMonth = ref('all')
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 onMounted(() => {
+  logsStore.initLogs()
   sheetsStore.initSheets()
 })
 
@@ -96,13 +99,20 @@ const formatDate = (ts) => {
   return d.toLocaleDateString()
 }
 
-const handleFileUpload = (e) => uploadFile.value = e.target.files[0]
+const handleFileUpload = (e) => {
+  uploadFile.value = e.target.files[0]
+}
 
 const uploadSheet = async () => {
   if (!uploadFile.value) return
   await sheetsStore.uploadSheet(uploadFile.value, 'admin')
   uploadFile.value = null
   showUpload.value = false
+}
+
+const getDisplayedLogCount = (sheet) => {
+  if (logsStore.loading) return sheet.logCount ?? 0
+  return logsStore.getLogsBySheet(sheet.shortId).length
 }
 </script>
 
@@ -175,7 +185,6 @@ select {
   cursor: pointer;
 }
 
-/* Update .upload-box input to ensure it doesn't overflow */
 .upload-box input {
   width: 100%;
   font-size: 0.75rem;

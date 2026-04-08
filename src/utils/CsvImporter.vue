@@ -18,6 +18,39 @@
     </div>
 
     <div class="tool-grid">
+      <div v-if="activeTab === 'members'" class="tool-card">
+        <h2 class="card-title">
+          <span>🔁</span> Update User Email
+        </h2>
+        <p class="card-desc">
+          Transfers a member's profile and all associated logs to a new email address. The old document will be deleted.
+        </p>
+        <label style="display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.25rem;">Current Email</label>
+        <input
+          type="email"
+          v-model="emailTransferOld"
+          placeholder="current@email.com"
+          style="display:block; width:100%; margin-bottom:0.75rem; padding:0.4rem 0.5rem; border:1px solid #d1d5db; border-radius:0.375rem; font-size:0.875rem;"
+        >
+        <label style="display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.25rem;">New Email</label>
+        <input
+          type="email"
+          v-model="emailTransferNew"
+          placeholder="new@email.com"
+          style="display:block; width:100%; margin-bottom:1rem; padding:0.4rem 0.5rem; border:1px solid #d1d5db; border-radius:0.375rem; font-size:0.875rem;"
+        >
+        <button
+          @click="runEmailTransfer"
+          :disabled="transferring"
+          class="btn-import"
+          style="background-color: #7c3aed;"
+        >
+          {{ transferring ? 'Transferring...' : 'Transfer Email' }}
+        </button>
+        <p v-if="emailTransferResult?.success" style="margin-top:0.75rem; color:#16a34a; font-size:0.875rem; font-weight:600;">✓ {{ emailTransferResult.success }}</p>
+        <p v-if="emailTransferResult?.error" style="margin-top:0.75rem; color:#b91c1c; font-size:0.875rem; font-weight:600;">✗ {{ emailTransferResult.error }}</p>
+      </div>
+
       <div v-if="activeTab === 'logs'" class="tool-card">
         <h2 class="card-title">
           <span>🧹</span> Data Hygiene
@@ -107,6 +140,10 @@ const parsing = ref(false)
 const uploading = ref(false)
 const parsedData = ref([])
 const errorLog = ref([])
+const emailTransferOld = ref('')
+const emailTransferNew = ref('')
+const emailTransferResult = ref(null)
+const transferring = ref(false)
 
 const stores = {
   members: useMembersStore(),
@@ -139,6 +176,28 @@ const parseCsv = (event) => {
       parsing.value = false
     }
   })
+}
+
+const runEmailTransfer = async () => {
+  const oldEmail = emailTransferOld.value.trim()
+  const newEmail = emailTransferNew.value.trim()
+  if (!oldEmail || !newEmail) {
+    emailTransferResult.value = { error: 'Both email addresses are required.' }
+    return
+  }
+  if (!confirm(`Transfer member profile and ALL logs from "${oldEmail}" to "${newEmail}"? This cannot be undone.`)) return
+  transferring.value = true
+  emailTransferResult.value = null
+  try {
+    const result = await stores.members.transferMemberEmail(oldEmail, newEmail)
+    emailTransferResult.value = { success: `Done. ${result.logsUpdated} log(s) updated to new email.` }
+    emailTransferOld.value = ''
+    emailTransferNew.value = ''
+  } catch (e) {
+    emailTransferResult.value = { error: e.message }
+  } finally {
+    transferring.value = false
+  }
 }
 
 const runCleaner = async () => {

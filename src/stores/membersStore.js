@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { db } from '@/firebase'
-import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, writeBatch, getDocs, query, Timestamp } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, deleteDoc, writeBatch, getDocs, query, where, Timestamp } from 'firebase/firestore'
+
+const normalizeEmail = (value) => (value || '').trim().toLowerCase()
 
 export const useMembersStore = defineStore('members', {
   state: () => ({
@@ -10,8 +12,12 @@ export const useMembersStore = defineStore('members', {
 
   getters: {
     getMemberByEmail: (state) => (email) => {
-      if (!email) return null
-      return state.members.find(m => m.id.toLowerCase() === email.toLowerCase())
+      const normalizedEmail = normalizeEmail(email)
+      if (!normalizedEmail) return null
+
+      return state.members.find(m => {
+        return normalizeEmail(m.id) === normalizedEmail || normalizeEmail(m.Email) === normalizedEmail
+      })
     },
     
     // Filter by MembershipType = 'Applicant' (case-insensitive)
@@ -42,7 +48,7 @@ export const useMembersStore = defineStore('members', {
 
     async addMember(data) {
       if (!data.Email) throw new Error("Email is required.")
-      const emailId = data.Email.trim().toLowerCase()
+      const emailId = normalizeEmail(data.Email)
       const docRef = doc(db, 'members', emailId)
 
       const existing = await getDoc(docRef)
@@ -57,9 +63,14 @@ export const useMembersStore = defineStore('members', {
     },
 
     async updateMember(emailId, data) {
-      const docRef = doc(db, 'members', emailId)
+      const existingMember = this.getMemberByEmail(emailId)
+      const resolvedDocId = normalizeEmail(existingMember?.id || emailId)
+      const resolvedEmail = normalizeEmail(data.Email || existingMember?.Email || emailId)
+      const docRef = doc(db, 'members', resolvedDocId)
+
       await updateDoc(docRef, {
         ...data,
+        Email: resolvedEmail,
         updatedAt: new Date()
       })
     },
@@ -72,13 +83,14 @@ export const useMembersStore = defineStore('members', {
 
       rows.forEach(row => {
         const email = row['Email']?.trim() || row['email']?.trim()
+        const normalizedEmail = normalizeEmail(email)
         
-        if (email) {
-          const docRef = doc(db, 'members', email.toLowerCase())
+        if (normalizedEmail) {
+          const docRef = doc(db, 'members', normalizedEmail)
           
           // Strict Mapping based on your Schema
           batch.set(docRef, {
-            Email: email,
+            Email: normalizedEmail,
             FirstName: row['FirstName'] || '',
             FirstName2: row['FirstName2'] || '',
             LastName: row['LastName'] || '',
@@ -113,6 +125,48 @@ export const useMembersStore = defineStore('members', {
 
       await batch.commit()
       return count
+    },
+
+    async transferMemberEmail(oldEmail, newEmail) {
+      const oldNorm = normalizeEmail(oldEmail)
+      const newNorm = normalizeEmail(newEmail)
+
+      if (!oldNorm || !newNorm) throw new Error('Both email addresses are required.')
+      if (oldNorm === newNorm) throw new Error('New email must be different from the current email.')
+
+      const oldDocRef = doc(db, 'members', oldNorm)
+      const oldSnap = await getDoc(oldDocRef)
+      if (!oldSnap.exists()) throw new Error(`No member found with email: ${oldEmail}`)
+
+      const newDocRef = doc(db, 'members', newNorm)
+      const newSnap = await getDoc(newDocRef)
+      if (newSnap.exists()) throw new Error(`A member already exists at email: ${newEmail}`)
+
+      // Copy member data to new document ID
+      const memberData = oldSnap.data()
+      await setDoc(newDocRef, { ...memberData, Email: newNorm, updatedAt: new Date() })
+
+      // Batch-update all logs referencing the old email
+      const logsSnap = await getDocs(query(collection(db, 'logs'), where('MemberEmail', '==', oldNorm)))
+      let logsBatch = writeBatch(db)
+      let batchCount = 0
+      let totalLogs = 0
+      for (const logDoc of logsSnap.docs) {
+        logsBatch.update(logDoc.ref, { MemberEmail: newNorm })
+        batchCount++
+        totalLogs++
+        if (batchCount >= 400) {
+          await logsBatch.commit()
+          logsBatch = writeBatch(db)
+          batchCount = 0
+        }
+      }
+      if (batchCount > 0) await logsBatch.commit()
+
+      // Remove old member document
+      await deleteDoc(oldDocRef)
+
+      return { logsUpdated: totalLogs }
     },
 
     async getExportData() {

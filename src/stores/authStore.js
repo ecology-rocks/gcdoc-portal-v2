@@ -6,7 +6,7 @@ import {
   signOut, 
   onAuthStateChanged 
 } from 'firebase/auth'
-import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -78,8 +78,24 @@ export const useAuthStore = defineStore('auth', {
 
         this.profile = data
       } else {
-        // Guest / Non-member handling
-        this.profile = { roles: ['guest'] }
+        // Fallback: member doc ID may differ from auth email after an email transfer
+        const fallbackQ = query(collection(db, 'members'), where('Email', '==', email.toLowerCase()))
+        const fallbackSnap = await getDocs(fallbackQ)
+
+        if (!fallbackSnap.empty) {
+          let data = fallbackSnap.docs[0].data()
+          if (!data.roles && data.Role) {
+            const legacyRole = data.Role.toLowerCase()
+            await updateDoc(fallbackSnap.docs[0].ref, { roles: [legacyRole] })
+            data.roles = [legacyRole]
+          } else if (!data.roles) {
+            data.roles = []
+          }
+          this.profile = data
+        } else {
+          // Genuine non-member
+          this.profile = { roles: ['guest'] }
+        }
       }
     },
 

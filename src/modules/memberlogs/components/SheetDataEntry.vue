@@ -90,12 +90,15 @@ const commitCurrentRow = () => {
 
 const markDirty = () => hasUnsavedChanges.value = true
 
+const getSheetLogCount = () => rows.value.filter(row => row.MemberEmail).length
+
 const deleteRow = async (idx) => {
   const row = rows.value[idx]
   if (row.id) {
     if (confirm('Delete saved entry?')) {
       await logsStore.deleteLog(row.id)
       rows.value.splice(idx, 1)
+      await sheetsStore.updateLogCount(props.sheet.id, getSheetLogCount())
     }
   } else {
     rows.value.splice(idx, 1)
@@ -107,9 +110,7 @@ const saveChanges = async () => {
   const toUpdate = rows.value.filter(r => r.id && r.MemberEmail)
 
   await logsStore.batchSave(toCreate, toUpdate, props.sheet.shortId)
-
-  const totalCount = logsStore.getLogsBySheet(props.sheet.shortId).length + toCreate.length
-  await sheetsStore.updateLogCount(props.sheet.id, totalCount)
+  await sheetsStore.updateLogCount(props.sheet.id, getSheetLogCount())
 
   hasUnsavedChanges.value = false
   emit('saved')
