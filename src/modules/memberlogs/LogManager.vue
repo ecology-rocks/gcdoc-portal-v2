@@ -3,25 +3,29 @@
     <div class="header">
       <h1>Log Management</h1>
       <div class="nav-tabs">
-        <button 
-          @click="viewMode = 'list'" 
-          :class="{ active: viewMode === 'list' }">
+        <button
+          @click="viewMode = 'list'"
+          :class="{ active: viewMode === 'list' }"
+        >
           📋 Log History
         </button>
-<button 
-  @click="viewMode = 'approvals'" 
-  :class="{ active: viewMode === 'approvals' }">
-  ✅ Approvals
-  <span v-if="pendingCount > 0" class="badge">{{ pendingCount }}</span>
-</button>
-        <button 
-          @click="viewMode = 'single'" 
-          :class="{ active: viewMode === 'single' }">
+        <button
+          @click="viewMode = 'approvals'"
+          :class="{ active: viewMode === 'approvals' }"
+        >
+          ✅ Approvals
+          <span v-if="pendingCount > 0" class="badge">{{ pendingCount }}</span>
+        </button>
+        <button
+          @click="viewMode = 'single'"
+          :class="{ active: viewMode === 'single' }"
+        >
           ➕ Single Entry
         </button>
-        <button 
-          @click="viewMode = 'sheets'" 
-          :class="{ active: viewMode === 'sheets' }">
+        <button
+          @click="viewMode = 'sheets'"
+          :class="{ active: viewMode === 'sheets' }"
+        >
           📑 Sheet Processor
         </button>
       </div>
@@ -30,7 +34,9 @@
     <div class="content-area">
       <LogHistory v-if="viewMode === 'list'" />
       <SingleEntryForm v-else-if="viewMode === 'single'" />
-      <SheetManager v-else-if="viewMode === 'sheets'" />
+      <div v-else-if="viewMode === 'sheets'" class="sheets-view">
+        <SheetManager />
+      </div>
       <LogApprovals v-else-if="viewMode === 'approvals'" />
     </div>
   </div>
@@ -63,6 +69,7 @@ const pendingCount = computed(() => logsStore.pendingLogs.length)
   align-items: flex-start;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  flex: 0 0 auto;
 }
 
 h1 {
@@ -115,12 +122,20 @@ button.active {
   background: white;
   border-radius: 0.5rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  overflow: visible;
 }
+
+.sheets-view {
+  width: 100%;
+}
+
+
 
 @media (min-width: 768px) {
   .nav-tabs {
     flex-wrap: nowrap;
   }
+
   button {
     flex: 0 0 auto;
     font-size: 1rem;

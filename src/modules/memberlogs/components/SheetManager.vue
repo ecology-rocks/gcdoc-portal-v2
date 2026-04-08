@@ -39,27 +39,26 @@ const refreshSheet = () => {
 
 <style scoped>
 .sheet-manager {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 1rem;
-  overflow: hidden;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .sheet-manager {
-    flex-direction: row;
+    grid-template-columns: minmax(300px, 360px) 1fr;
+    align-items: start;
   }
 }
 
 .workspace {
-  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: white;
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .empty-state {

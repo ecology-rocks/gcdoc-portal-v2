@@ -86,8 +86,9 @@ const imageStyle = computed(() => {
 
 <style scoped>
 .image-viewer {
-  flex: 1 1 auto; /* Grow to fill the top half */
-  min-height: 40vh; /* Absolute floor: never shrink smaller than 40% of the screen */
+  flex: 0 0 38%;
+  min-height: 260px;
+  max-height: 45%;
   background-color: #0f172a;
   position: relative;
   overflow: hidden;

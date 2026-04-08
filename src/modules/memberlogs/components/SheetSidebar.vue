@@ -128,12 +128,6 @@ const getDisplayedLogCount = (sheet) => {
   flex-shrink: 0;
 }
 
-@media (min-width: 768px) {
-  .sidebar {
-    width: 350px;
-  }
-}
-
 .filters {
   padding: 1rem;
   background-color: #f9fafb;
@@ -231,8 +225,14 @@ select {
 }
 
 .sheet-list {
-  flex: 1;
   overflow-y: auto;
+  max-height: 60vh;
+}
+
+@media (max-width: 1023px) {
+  .sheet-list {
+    max-height: none;
+  }
 }
 
 .no-results {

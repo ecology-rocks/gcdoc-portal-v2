@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, reactive, computed } from 'vue'
+import { ref, watch, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useLogsStore } from '@/stores/logsStore'
 import { useSheetsStore } from '@/stores/sheetsStore'
 import MemberSelect from '@/components/admin/MemberSelect.vue'
@@ -12,6 +12,7 @@ const sheetsStore = useSheetsStore()
 
 const rows = ref([])
 const hasUnsavedChanges = ref(false)
+const isMobile = ref(false)
 const sports = ['Agility', 'Barn Hunt', 'Conformation', 'Rally', 'Obedience', 'Freestyle', 'Coursing', 'Other']
 
 // Quick-select defaults
@@ -122,6 +123,22 @@ const toggleStatus = async () => {
   props.sheet.status = newStatus
   emit('statusChange')
 }
+
+let mediaQuery = null
+const syncViewportMode = () => {
+  if (!mediaQuery) return
+  isMobile.value = mediaQuery.matches
+}
+
+onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 768px)')
+  syncViewportMode()
+  mediaQuery.addEventListener('change', syncViewportMode)
+})
+
+onUnmounted(() => {
+  mediaQuery?.removeEventListener('change', syncViewportMode)
+})
 </script>
 
 <template>
@@ -198,7 +215,7 @@ const toggleStatus = async () => {
 
     <div class="table-scroll">
       <div v-if="rows.length === 0" class="empty-state">No entries logged yet.</div>
-      <table v-else>
+      <table v-else-if="!isMobile">
         <thead>
           <tr>
             <th style="width: 30px">#</th>
@@ -230,6 +247,41 @@ const toggleStatus = async () => {
           </tr>
         </tbody>
       </table>
+
+      <div v-else class="mobile-cards">
+        <div v-for="(row, idx) in rows" :key="idx" class="log-card" :class="{ existing: row.isExisting }">
+          <div class="log-card-header">
+            <strong>Entry #{{ idx + 1 }}</strong>
+            <button @click="deleteRow(idx)" class="del-btn" aria-label="Delete entry">×</button>
+          </div>
+
+          <div class="log-card-field">
+            <label>Member</label>
+            <MemberSelect v-model="row.MemberEmail" @update:modelValue="markDirty" />
+          </div>
+
+          <div class="log-card-field">
+            <label>Activity</label>
+            <input v-model="row.Activity" type="text" @input="markDirty" class="table-input">
+          </div>
+
+          <div class="log-card-grid">
+            <div class="log-card-field">
+              <label>Type</label>
+              <select v-model="row.type" @change="markDirty" class="table-input">
+                <option :value="logsStore.logType('STANDARD')">Normal (1x)</option>
+                <option :value="logsStore.logType('MAINT')">Maint (2x)</option>
+                <option :value="logsStore.logType('SETUP')">Setup (2x)</option>
+              </select>
+            </div>
+
+            <div class="log-card-field">
+              <label>Hours</label>
+              <input v-model.number="row.clockHours" type="number" step="0.25" @input="markDirty" class="table-input text-center">
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -240,9 +292,6 @@ const toggleStatus = async () => {
   flex-direction: column;
   background: white;
   border-top: 4px solid #6366f1;
-  /* Fixed height to ensure the table scrolls internally while keeping entry form visible */
-  height: 45vh; 
-  min-height: 400px;
 }
 
 .entry-header {
@@ -383,10 +432,18 @@ const toggleStatus = async () => {
 
 /* --- Table Area --- */
 .table-scroll {
-  flex: 1;
+  min-height: 420px;
+  max-height: 62vh;
   overflow-y: auto;
   padding: 1rem;
   background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .table-scroll {
+    min-height: 300px;
+    max-height: 52vh;
+  }
 }
 
 table {
@@ -443,5 +500,52 @@ tr.existing td { background-color: #f8fafc; }
   color: #94a3b8;
   font-style: italic;
   padding: 2rem;
+}
+
+.mobile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.log-card {
+  border: 1px solid #dbe3ee;
+  border-radius: 0.6rem;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.log-card.existing {
+  background: #f8fafc;
+}
+
+.log-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.log-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.log-card-field label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #64748b;
+}
+
+.log-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 0.5rem;
 }
 </style>
