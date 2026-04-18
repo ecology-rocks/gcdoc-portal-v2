@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { db } from "@/firebase";
+import { useAuthStore } from "@/stores/authStore";
 import {
   collection,
   onSnapshot,
@@ -12,12 +13,29 @@ import {
   Timestamp,
   getDocs,
   query,
+  where,
 } from "firebase/firestore";
+
+const getClockHours = (log) => {
+  const rawClock = Number(log.clockHours);
+  if (!Number.isNaN(rawClock) && rawClock > 0) return rawClock;
+
+  // Legacy fallback: infer raw clock hours from credited hours.
+  const credited = Number(log.Hours) || 0;
+  const type = log.type || "";
+  if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
+    return credited / 2;
+  }
+  return credited;
+};
 
 export const useLogsStore = defineStore("logs", {
   state: () => ({
     logs: [],
     loading: false,
+    error: null,
+    unsubscribeLogs: null,
+    listenerKey: null,
   }),
 
   getters: {
@@ -114,7 +132,7 @@ export const useLogsStore = defineStore("logs", {
         if (d >= startDate && d < endDate) {
           const email = log.MemberEmail || "unknown";
           const type = log.type || "";
-          const clock = Number(log.clockHours) || 0;
+          const clock = getClockHours(log);
 
           if (
             type.includes("Cleaning / Maintenance") ||
@@ -144,7 +162,7 @@ export const useLogsStore = defineStore("logs", {
         if (d >= startDate && d < endDate) {
           const email = log.MemberEmail || "unknown";
           const type = log.type || "";
-          const clock = Number(log.clockHours) || 0;
+          const clock = getClockHours(log);
 
           // Only Cleaning/Maintenance
           if (type.includes("Cleaning / Maintenance")) {
@@ -164,18 +182,65 @@ export const useLogsStore = defineStore("logs", {
   },
 
   actions: {
-    initLogs() {
-      this.loading = true;
-      onSnapshot(collection(db, "logs"), (snapshot) => {
-        this.logs = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .sort((a, b) => {
-            const dateA = a.Date?.seconds || 0;
-            const dateB = b.Date?.seconds || 0;
-            return dateB - dateA;
-          });
+    async initLogs() {
+      const authStore = useAuthStore();
+      if (authStore.loading) await authStore.init();
+
+      const userEmail = authStore.user?.email?.toLowerCase();
+      if (!userEmail) {
+        this.stopLogsListener();
         this.loading = false;
-      });
+        this.logs = [];
+        this.error = "Sign in required to view logs.";
+        return;
+      }
+
+      const canReadAllLogs = authStore.isAdmin || authStore.isKioskUser;
+      const nextListenerKey = canReadAllLogs ? "all" : `member:${userEmail}`;
+
+      if (this.unsubscribeLogs && this.listenerKey === nextListenerKey) {
+        return;
+      }
+
+      this.stopLogsListener();
+
+      const logsQuery = canReadAllLogs
+        ? collection(db, "logs")
+        : query(collection(db, "logs"), where("MemberEmail", "==", userEmail));
+
+      this.loading = true;
+      this.error = null;
+      this.listenerKey = nextListenerKey;
+      this.unsubscribeLogs = onSnapshot(
+        logsQuery,
+        (snapshot) => {
+          this.logs = snapshot.docs
+            .map((doc) => ({ id: doc.id, ...doc.data() }))
+            .sort((a, b) => {
+              const dateA = a.Date?.seconds || 0;
+              const dateB = b.Date?.seconds || 0;
+              return dateB - dateA;
+            });
+          this.loading = false;
+        },
+        (error) => {
+          this.loading = false;
+          this.error = error?.code === "permission-denied"
+            ? "You do not have permission to read logs."
+            : error?.message || "Unable to load logs.";
+          if (error?.code === "permission-denied") {
+            this.logs = [];
+          }
+        }
+      );
+    },
+
+    stopLogsListener() {
+      if (this.unsubscribeLogs) {
+        this.unsubscribeLogs();
+        this.unsubscribeLogs = null;
+      }
+      this.listenerKey = null;
     },
 
     async cleanLegacyTypes() {

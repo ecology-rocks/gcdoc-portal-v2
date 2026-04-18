@@ -70,10 +70,19 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   if (authStore.loading) await authStore.init()
 
+  if (authStore.user) {
+    await authStore.ensureProfileLoaded()
+  }
+
+  if (authStore.isKioskUser && to.path !== '/kiosk') {
+    next('/kiosk')
+    return
+  }
+
   if (to.meta.requiresAuth && !authStore.user) {
     next('/kiosk')
   } else if (to.path === '/login' && authStore.user) {
-    next('/')
+    next(authStore.isKioskUser ? '/kiosk' : '/')
   } else {
     next()
   }

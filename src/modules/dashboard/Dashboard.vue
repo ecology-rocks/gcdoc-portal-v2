@@ -2,49 +2,8 @@
   <div class="dashboard-container">
     
     <div class="welcome-header">
-      <h1>Welcome, {{ authStore.profile?.FirstName || 'Member' }}!</h1>
+      <h1>Welcome, {{ welcomeName }}!</h1>
       <p>Manage the club and track your contributions.</p>
-    </div>
-
-    <div class="section-container">
-      <h2 class="section-title">My Schedule</h2>
-      <div class="dashboard-grid">
-        
-        <div class="card card-purple">
-          <div class="card-body">
-            <div class="card-icon purple-bg">
-              <span>🎒</span>
-            </div>
-            <div class="card-info">
-              <dt>Enrolled Classes</dt>
-              <dd>{{ studentClassCount }} Classes</dd>
-            </div>
-          </div>
-          <div class="card-footer">
-            <RouterLink to="/classes" class="link-purple">
-              View Schedule &rarr;
-            </RouterLink>
-          </div>
-        </div>
-
-        <div v-if="classStore.isTeacher" class="card card-teal">
-          <div class="card-body">
-            <div class="card-icon teal-bg">
-              <span>🍎</span>
-            </div>
-            <div class="card-info">
-              <dt>Instructing</dt>
-              <dd>{{ teacherClassCount }} Classes</dd>
-            </div>
-          </div>
-          <div class="card-footer">
-            <RouterLink to="/classes" class="link-teal">
-              Manage Students &rarr;
-            </RouterLink>
-          </div>
-        </div>
-
-      </div>
     </div>
 
     <div v-if="hasSpecialRole" class="section-container">
@@ -137,6 +96,47 @@
 
     </div>
 
+    <div v-if="authStore.isAdmin" class="section-container">
+      <h2 class="section-title">My Classes</h2>
+      <div class="dashboard-grid">
+
+        <div class="card card-purple">
+          <div class="card-body">
+            <div class="card-icon purple-bg">
+              <span>🎒</span>
+            </div>
+            <div class="card-info">
+              <dt>Enrolled Classes</dt>
+              <dd>{{ studentClassCount }} Classes</dd>
+            </div>
+          </div>
+          <div class="card-footer">
+            <RouterLink to="/classes" class="link-purple">
+              View Schedule &rarr;
+            </RouterLink>
+          </div>
+        </div>
+
+        <div v-if="classStore.isTeacher" class="card card-teal">
+          <div class="card-body">
+            <div class="card-icon teal-bg">
+              <span>🍎</span>
+            </div>
+            <div class="card-info">
+              <dt>Instructing</dt>
+              <dd>{{ teacherClassCount }} Classes</dd>
+            </div>
+          </div>
+          <div class="card-footer">
+            <RouterLink to="/classes" class="link-teal">
+              Manage Students &rarr;
+            </RouterLink>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -150,8 +150,17 @@ import PersonalLogHistory from '@/modules/memberlogs/components/PersonalLogHisto
 const authStore = useAuthStore()
 const classStore = useClassStore()
 
-onMounted(() => {
-  classStore.initClasses()
+onMounted(async () => {
+  await authStore.ensureProfileLoaded()
+  if (authStore.isAdmin) {
+    classStore.initClasses()
+  }
+})
+
+const welcomeName = computed(() => {
+  if (authStore.profile?.FirstName) return authStore.profile.FirstName
+
+  return 'Member'
 })
 
 const hasSpecialRole = computed(() => {

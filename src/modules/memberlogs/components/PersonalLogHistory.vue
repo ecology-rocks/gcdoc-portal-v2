@@ -53,25 +53,82 @@
           </div>
         </div>
       </div>
+
+      <div class="history-actions">
+        <button @click="openMyReport" class="btn-view-all">View All</button>
+      </div>
+    </div>
+
+    <div v-if="showReportModal && reportData" class="modal-overlay">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h2>Volunteer Hours Report</h2>
+          <button @click="showReportModal = false" class="close-btn">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="report-header">
+            <h3>{{ reportData.memberName }}</h3>
+            <p>Fiscal Year: {{ reportData.fyString }}</p>
+          </div>
+
+          <div class="report-summary">
+            <div class="summary-box">
+              <div class="summary-value">{{ reportData.totalHrs }}</div>
+              <div class="summary-label">Total FY Hours</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value">{{ reportData.stdVouchers }}</div>
+              <div class="summary-label">Standard Vouchers</div>
+            </div>
+            <div class="summary-box">
+              <div class="summary-value">{{ reportData.blueVouchers }}</div>
+              <div class="summary-label">Blue Vouchers</div>
+            </div>
+          </div>
+
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Activity</th>
+                <th>Type</th>
+                <th class="text-right">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="log in reportData.logs" :key="log.id">
+                <td>{{ formatDate(log.Date).month }} {{ formatDate(log.Date).day }}</td>
+                <td>{{ log.Activity }}</td>
+                <td>{{ log.type }}</td>
+                <td class="text-right">{{ log.Hours }}</td>
+              </tr>
+              <tr v-if="reportData.logs.length === 0">
+                <td colspan="4" class="empty-msg">No hours logged this fiscal year.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useLogsStore } from '@/stores/logsStore'
 import { useAuthStore } from '@/stores/authStore'
 
 const logsStore = useLogsStore()
 const authStore = useAuthStore()
+const showReportModal = ref(false)
+const reportData = ref(null)
 
 const loading = computed(() => logsStore.loading)
 
 onMounted(() => {
-  if (logsStore.logs.length === 0) {
-    logsStore.initLogs()
-  }
+  logsStore.initLogs()
 })
 
 // Filter logs for the logged-in user
@@ -81,6 +138,30 @@ const myLogs = computed(() => {
   return logsStore.logs
     .filter(l => l.MemberEmail?.toLowerCase() === email)
     .slice(0, 10)
+})
+
+const myFYLogs = computed(() => {
+  const email = authStore.user?.email?.toLowerCase()
+  if (!email) return []
+
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+  const startYear = currentMonth >= 9 ? currentYear : currentYear - 1
+  const startDate = new Date(startYear, 9, 1)
+  const endDate = new Date(startYear + 1, 9, 1)
+
+  return logsStore.logs
+    .filter(l => {
+      if (l.MemberEmail?.toLowerCase() !== email) return false
+      const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
+      return d >= startDate && d < endDate
+    })
+    .sort((a, b) => {
+      const dateA = a.Date?.toDate ? a.Date.toDate() : new Date(a.Date)
+      const dateB = b.Date?.toDate ? b.Date.toDate() : new Date(b.Date)
+      return dateA - dateB
+    })
 })
 
 // --- METRICS ---
@@ -106,6 +187,23 @@ const myBlueVouchers = computed(() => {
   const email = authStore.user?.email?.toLowerCase()
   return logsStore.blueVouchersByMember[email] || 0
 })
+
+const openMyReport = () => {
+  const now = new Date()
+  const currentMonth = now.getMonth()
+  const currentYear = now.getFullYear()
+  const startYear = currentMonth >= 9 ? currentYear : currentYear - 1
+
+  reportData.value = {
+    memberName: `${authStore.profile?.FirstName || 'Member'} ${authStore.profile?.LastName || ''}`.trim(),
+    fyString: `Oct 1, ${startYear} - Sep 30, ${startYear + 1}`,
+    logs: myFYLogs.value,
+    totalHrs: myFYHours.value,
+    stdVouchers: myVouchers.value,
+    blueVouchers: myBlueVouchers.value
+  }
+  showReportModal.value = true
+}
 
 const formatDate = (timestamp) => {
   if (!timestamp) return { day: '?', month: '?' }
@@ -269,6 +367,115 @@ const formatDate = (timestamp) => {
   color: #9ca3af;
   font-style: italic;
   margin-top: 2rem;
+}
+
+.history-actions {
+  margin-top: 0.75rem;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 0.75rem;
+  text-align: right;
+}
+
+.btn-view-all {
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.4rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.modal-container {
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow: auto;
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.close-btn {
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.report-header h3 {
+  margin: 0;
+}
+
+.report-header p {
+  margin: 0.25rem 0 1rem;
+  color: #6b7280;
+}
+
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.summary-box {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.summary-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.summary-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th,
+.report-table td {
+  border-bottom: 1px solid #eef2f7;
+  padding: 0.6rem;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.text-right {
+  text-align: right;
 }
 
 .logs-wrapper::-webkit-scrollbar { width: 6px; }

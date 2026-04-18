@@ -17,14 +17,14 @@
       <div class="profile-section">
         <div v-if="authStore.profile" class="profile-card">
           <div class="avatar">
-            {{ getInitials(authStore.profile) }}
+            {{ profileInitials }}
           </div>
           <div class="profile-info">
             <p class="profile-name">
-              {{ authStore.profile.FirstName }} {{ authStore.profile.LastName }}
+              {{ displayFirstName }} {{ displayLastName }}
             </p>
             <p class="profile-role">
-              {{ authStore.profile.Role || 'Member' }}
+              {{ displayRole }}
             </p>
           </div>
         </div>
@@ -93,15 +93,35 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 import { useClassStore } from '@/stores/classStore'
 
-const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const classStore = useClassStore()
-classStore.initClasses()
+
+const resolvedProfile = computed(() => authStore.profile || null)
+
+const displayFirstName = computed(() => {
+  return resolvedProfile.value?.FirstName || 'Member'
+})
+
+const displayLastName = computed(() => {
+  return resolvedProfile.value?.LastName || ''
+})
+
+const displayRole = computed(() => {
+  if (resolvedProfile.value?.Role) return resolvedProfile.value.Role
+  if (Array.isArray(resolvedProfile.value?.roles) && resolvedProfile.value.roles.length > 0) {
+    return resolvedProfile.value.roles[0]
+  }
+  return 'Member'
+})
+
+const profileInitials = computed(() => {
+  return getInitials(resolvedProfile.value)
+})
 
 const sidebarOpen = ref(false)
 

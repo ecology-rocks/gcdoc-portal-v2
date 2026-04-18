@@ -2,10 +2,14 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
+import { useAuthStore } from '@/stores/authStore'
+import { useRouter } from 'vue-router'
 import ActivityWizard from '@/components/shared/ActivityWizard.vue'
 
 const membersStore = useMembersStore()
 const logsStore = useLogsStore()
+const authStore = useAuthStore()
+const router = useRouter()
 
 const TYPES = {
   MAINT: "Cleaning / Maintenance (2x + Blue Ribbon)",
@@ -151,6 +155,16 @@ const cancelSignOut = () => {
   activeSignOut.value = null
 }
 
+const handleFooterAuthAction = async () => {
+  if (authStore.user) {
+    await authStore.logout()
+    router.push('/kiosk')
+    return
+  }
+
+  router.push('/login')
+}
+
 const resetWizard = () => {
   step.value = 1; search.value = ''; selectedMember.value = null; form.category = ''; form.sport = ''; manualHours.value = ''
 }
@@ -291,7 +305,14 @@ onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
     </div>
 
     <div class="kiosk-footer">
-      <RouterLink to="/login" class="admin-link">
+      <button
+        v-if="authStore.user"
+        class="admin-link admin-link-btn"
+        @click="handleFooterAuthAction"
+      >
+        Logout
+      </button>
+      <RouterLink v-else to="/login" class="admin-link">
         Member Login
       </RouterLink>
     </div>
@@ -628,6 +649,12 @@ onMounted(() => { membersStore.initMembers(); logsStore.initLogs() })
   opacity: 0.6;
   transition: all 0.2s;
   padding: 0.5rem 1rem;
+}
+
+.admin-link-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .admin-link:hover {

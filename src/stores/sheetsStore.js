@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { db, storage } from '@/firebase'
+import { useAuthStore } from '@/stores/authStore'
 // ADDED: onSnapshot
 import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, onSnapshot } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
@@ -7,19 +8,53 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 export const useSheetsStore = defineStore('sheets', {
   state: () => ({
     sheets: [],
-    loading: false
+    loading: false,
+    error: null,
+    unsubscribeSheets: null
   }),
 
   actions: {
     async initSheets() {
+      if (this.unsubscribeSheets) return
+
+      const authStore = useAuthStore()
+      if (authStore.loading) await authStore.init()
+
+      if (!authStore.isAdmin) {
+        this.loading = false
+        this.sheets = []
+        this.error = 'Admin access required to view sheets.'
+        return
+      }
+
       this.loading = true
+      this.error = null
       const q = query(collection(db, 'sheets'), orderBy('uploadedAt', 'desc'))
       
       // Real-time listener
-      onSnapshot(q, (snapshot) => {
-         this.sheets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-         this.loading = false
-      })
+      this.unsubscribeSheets = onSnapshot(
+        q,
+        (snapshot) => {
+          this.sheets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          this.loading = false
+        },
+        (error) => {
+          this.loading = false
+          this.error = error?.code === 'permission-denied'
+            ? 'You do not have permission to read sheets.'
+            : error?.message || 'Unable to load sheets.'
+          if (error?.code === 'permission-denied') {
+            this.sheets = []
+          }
+        }
+      )
+    },
+
+    stopSheetsListener() {
+      if (this.unsubscribeSheets) {
+        this.unsubscribeSheets()
+        this.unsubscribeSheets = null
+      }
     },
 
     async uploadSheet(file, uploaderEmail) {

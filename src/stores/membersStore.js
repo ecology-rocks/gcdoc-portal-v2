@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { db } from '@/firebase'
+import { useAuthStore } from '@/stores/authStore'
 import { collection, onSnapshot, doc, setDoc, getDoc, updateDoc, deleteDoc, writeBatch, getDocs, query, where, Timestamp } from 'firebase/firestore'
 
 const normalizeEmail = (value) => (value || '').trim().toLowerCase()
@@ -7,7 +8,9 @@ const normalizeEmail = (value) => (value || '').trim().toLowerCase()
 export const useMembersStore = defineStore('members', {
   state: () => ({
     members: [],
-    loading: false
+    loading: false,
+    error: null,
+    unsubscribeMembers: null
   }),
 
   getters: {
@@ -38,12 +41,43 @@ export const useMembersStore = defineStore('members', {
 
   actions: {
     async initMembers() {
-      if (this.members.length > 0) return 
-      this.loading = true
-      onSnapshot(collection(db, 'members'), (snapshot) => {
-        this.members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      if (this.unsubscribeMembers || this.members.length > 0) return
+
+      const authStore = useAuthStore()
+      if (authStore.loading) await authStore.init()
+
+      if (!authStore.user) {
         this.loading = false
-      })
+        this.members = []
+        this.error = 'Sign in required to view members.'
+        return
+      }
+
+      this.loading = true
+      this.error = null
+      this.unsubscribeMembers = onSnapshot(
+        collection(db, 'members'),
+        (snapshot) => {
+          this.members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+          this.loading = false
+        },
+        (error) => {
+          this.loading = false
+          this.error = error?.code === 'permission-denied'
+            ? 'You do not have permission to read members.'
+            : error?.message || 'Unable to load members.'
+          if (error?.code === 'permission-denied') {
+            this.members = []
+          }
+        }
+      )
+    },
+
+    stopMembersListener() {
+      if (this.unsubscribeMembers) {
+        this.unsubscribeMembers()
+        this.unsubscribeMembers = null
+      }
     },
 
     async addMember(data) {
