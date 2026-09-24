@@ -14,14 +14,15 @@ const normalizeEmail = (value) => String(value || '').trim().toLowerCase()
 const isValidEmail = (value) => /.+@.+\..+/.test(value)
 
 // FY runs Oct 1 - Sep 30, matching the app's existing convention.
-function getFiscalYearRange(now = new Date()) {
-  const currentMonth = now.getMonth()
-  const currentYear = now.getFullYear()
-  const startYear = currentMonth >= 9 ? currentYear : currentYear - 1
+function getFiscalYearForDate(date) {
+  const month = date.getMonth()
+  const year = date.getFullYear()
+  const startYear = month >= 9 ? year : year - 1
   return {
+    startYear,
     start: new Date(startYear, 9, 1),
     end: new Date(startYear + 1, 9, 1),
-    label: `Oct 1, ${startYear} - Sep 30, ${startYear + 1}`
+    label: `${startYear}-${startYear + 1} (Oct 1, ${startYear} - Sep 30, ${startYear + 1})`
   }
 }
 
@@ -64,26 +65,42 @@ export async function handler(event) {
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date))
 
-    const { start, end, label } = getFiscalYearRange()
-    const fyHours = logs
-      .filter((l) => {
-        const d = new Date(l.date)
-        return d >= start && d < end
-      })
-      .reduce((sum, l) => sum + l.hours, 0)
+    // Group logs into fiscal years so members can see prior years too, not just the current one.
+    const fyByStartYear = new Map()
+    for (const log of logs) {
+      const fy = getFiscalYearForDate(new Date(log.date))
+      if (!fyByStartYear.has(fy.startYear)) {
+        fyByStartYear.set(fy.startYear, { label: fy.label, startYear: fy.startYear, hours: 0, logs: [] })
+      }
+      const bucket = fyByStartYear.get(fy.startYear)
+      bucket.hours += log.hours
+      bucket.logs.push(log)
+    }
 
+    const fiscalYears = [...fyByStartYear.values()]
+      .sort((a, b) => b.startYear - a.startYear)
+      .map((fy) => ({
+        label: fy.label,
+        hours: Math.round(fy.hours * 100) / 100,
+        vouchers: fy.hours >= 50 ? Math.floor(fy.hours / 25) : 0,
+        logs: fy.logs
+      }))
+
+    const currentFyStartYear = getFiscalYearForDate(new Date()).startYear
+    const currentFy = fiscalYears.find((fy) => fy.label.startsWith(String(currentFyStartYear)))
     const totalHours = logs.reduce((sum, l) => sum + l.hours, 0)
-    const vouchers = fyHours >= 50 ? Math.floor(fyHours / 25) : 0
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
-        fiscalYear: label,
-        fiscalYearHours: Math.round(fyHours * 100) / 100,
+        // Kept for backward compatibility with the current-year-only display.
+        fiscalYear: currentFy?.label || '',
+        fiscalYearHours: currentFy?.hours || 0,
+        vouchers: currentFy?.vouchers || 0,
         totalHours: Math.round(totalHours * 100) / 100,
-        vouchers,
+        fiscalYears,
         logs
       })
     }

@@ -68,38 +68,61 @@ function gcdoc_member_hours_shortcode() {
     ?>
     <div class="gcdoc-hours-report">
         <h3>Volunteer Hours Summary</h3>
-        <p><strong>Fiscal Year:</strong> <?php echo esc_html($report['fiscalYear']); ?></p>
-        <p><strong>Hours this fiscal year:</strong> <?php echo esc_html($report['fiscalYearHours']); ?></p>
         <p><strong>All-time hours:</strong> <?php echo esc_html($report['totalHours']); ?></p>
-        <p><strong>Service vouchers earned:</strong> <?php echo esc_html($report['vouchers']); ?></p>
 
-        <h4>Log History</h4>
-        <?php if (empty($report['logs'])) : ?>
+        <?php if (empty($report['fiscalYears'])) : ?>
             <p>No logged hours yet.</p>
         <?php else : ?>
-            <table class="gcdoc-hours-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Activity</th>
-                        <th>Type</th>
-                        <th>Hours</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($report['logs'] as $log) : ?>
-                        <tr>
-                            <td><?php echo esc_html(date_i18n(get_option('date_format'), strtotime($log['date']))); ?></td>
-                            <td><?php echo esc_html($log['activity']); ?></td>
-                            <td><?php echo esc_html($log['type']); ?></td>
-                            <td><?php echo esc_html($log['hours']); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <?php foreach ($report['fiscalYears'] as $index => $fy) : ?>
+                <details class="gcdoc-fy-section" <?php echo $index === 0 ? 'open' : ''; ?>>
+                    <summary>
+                        <strong><?php echo esc_html($fy['label']); ?></strong>
+                        &mdash; <?php echo esc_html($fy['hours']); ?> hrs,
+                        <?php echo esc_html($fy['vouchers']); ?> voucher<?php echo intval($fy['vouchers']) === 1 ? '' : 's'; ?>
+                    </summary>
+                    <?php if (empty($fy['logs'])) : ?>
+                        <p>No logged hours for this fiscal year.</p>
+                    <?php else : ?>
+                        <table class="gcdoc-hours-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Activity</th>
+                                    <th>Type</th>
+                                    <th>Hours</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($fy['logs'] as $log) : ?>
+                                    <tr>
+                                        <td><?php echo esc_html(date_i18n(get_option('date_format'), strtotime($log['date']))); ?></td>
+                                        <td><?php echo esc_html($log['activity']); ?></td>
+                                        <td><?php echo esc_html($log['type']); ?></td>
+                                        <td><?php echo esc_html($log['hours']); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </details>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
     <?php
     return ob_get_clean();
 }
 add_shortcode('gcdoc_hours', 'gcdoc_member_hours_shortcode');
+
+function gcdoc_hours_styles() {
+    ?>
+    <style>
+        .gcdoc-hours-report .gcdoc-fy-section { margin-bottom: 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.5rem 0.75rem; }
+        .gcdoc-hours-report summary { cursor: pointer; padding: 0.25rem 0; }
+        .gcdoc-hours-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+        .gcdoc-hours-table th, .gcdoc-hours-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
+    </style>
+    <?php
+}
+add_action('wp_footer', 'gcdoc_hours_styles');
+
+
