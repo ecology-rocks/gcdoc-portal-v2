@@ -20,7 +20,8 @@
         <div class="card-content">
           <h3 class="member-name">{{ member.LastName }}, {{ member.FirstName }}</h3>
           <p class="membership-type">{{ member.MembershipType }}</p>
-          
+          <p v-if="member.Phone1" class="member-phone">{{ member.Phone1 }}</p>
+
           <div class="card-actions">
             <button @click="copyEmail(member.Email)" class="btn-copy" :title="'Copy ' + member.Email">
               <span class="email-text">{{ member.Email }}</span>
@@ -164,6 +165,12 @@ const copyEmail = async (email) => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.member-phone {
+  font-size: 0.875rem;
+  color: #374151;
+  margin: 0 0 1rem 0;
 }
 
 .card-actions {

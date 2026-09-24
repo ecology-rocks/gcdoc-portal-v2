@@ -39,6 +39,11 @@
           <span class="label">Dashboard</span>
         </RouterLink>
 
+        <RouterLink to="/directory" class="nav-item" active-class="active" @click="closeSidebar">
+          <span class="icon">📇</span>
+          <span class="label">Member Directory</span>
+        </RouterLink>
+
         <div v-if="classStore.isTeacher" class="nav-divider">Teacher Tools</div>
         
         <RouterLink v-if="classStore.isTeacher" to="/classes" class="nav-item" active-class="active" @click="closeSidebar">
