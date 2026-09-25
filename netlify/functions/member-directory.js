@@ -43,7 +43,7 @@ export async function handler(event) {
           membershipType: data.MembershipType || ''
         }
       })
-      .filter((m) => m.email)
+      .filter((m) => m.email && !['inactive', 'nonmember'].includes(m.membershipType.toLowerCase()))
       .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName))
 
     return {
