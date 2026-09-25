@@ -135,8 +135,10 @@ function gcdoc_member_directory_shortcode() {
     }
 
     // Shared across all users since the directory content is the same for everyone.
+    // Append ?gcdoc_refresh=1 to the page URL (as an admin) to bypass the cache.
     $cache_key = 'gcdoc_directory_all';
-    $data = get_transient($cache_key);
+    $force_refresh = current_user_can('manage_options') && isset($_GET['gcdoc_refresh']);
+    $data = $force_refresh ? false : get_transient($cache_key);
 
     if ($data === false) {
         $data = gcdoc_fetch_member_directory();
@@ -161,36 +163,36 @@ function gcdoc_member_directory_shortcode() {
         <?php if (empty($members)) : ?>
             <p>No members found.</p>
         <?php else : ?>
-            <table class="gcdoc-hours-table gcdoc-directory-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Family</th>
-                        <th>Type</th>
-                        <th>Phone</th>
-                        <th>Email</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($members as $m) : ?>
-                        <tr>
-                            <td><?php echo esc_html($m['lastName'] . ', ' . $m['firstName']); ?></td>
-                            <td><?php echo esc_html($m['familyName']); ?></td>
-                            <td><?php echo esc_html($m['membershipType']); ?></td>
-                            <td><?php echo esc_html($m['phone']); ?></td>
-                            <td><a href="mailto:<?php echo esc_attr($m['email']); ?>"><?php echo esc_html($m['email']); ?></a></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div class="gcdoc-directory-grid">
+                <?php foreach ($members as $m) : ?>
+                    <div class="gcdoc-member-card">
+                        <div class="gcdoc-member-name"><?php echo esc_html($m['lastName'] . ', ' . $m['firstName']); ?></div>
+                        <?php if (!empty($m['familyName'])) : ?>
+                            <div class="gcdoc-member-family"><?php echo esc_html($m['familyName']); ?></div>
+                        <?php endif; ?>
+                        <div class="gcdoc-member-type">
+                            <?php echo esc_html($m['membershipType']); ?>
+                            <?php if (!empty($m['joined'])) : ?>
+                                &middot; Joined <?php echo esc_html($m['joined']); ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="gcdoc-member-contact">
+                            <?php if (!empty($m['phone'])) : ?>
+                                <span class="gcdoc-member-phone"><?php echo esc_html($m['phone']); ?></span>
+                            <?php endif; ?>
+                            <a href="mailto:<?php echo esc_attr($m['email']); ?>"><?php echo esc_html($m['email']); ?></a>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         <?php endif; ?>
     </div>
     <script>
         function gcdocFilterDirectory(input) {
             var filter = input.value.toLowerCase();
-            var rows = input.closest('.gcdoc-directory').querySelectorAll('.gcdoc-directory-table tbody tr');
-            rows.forEach(function (row) {
-                row.style.display = row.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+            var cards = input.closest('.gcdoc-directory').querySelectorAll('.gcdoc-member-card');
+            cards.forEach(function (card) {
+                card.style.display = card.textContent.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
             });
         }
     </script>
@@ -208,6 +210,14 @@ function gcdoc_hours_styles() {
         .gcdoc-hours-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
         .gcdoc-hours-table th, .gcdoc-hours-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
         .gcdoc-directory-search { width: 100%; max-width: 320px; padding: 0.4rem 0.6rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; }
+        .gcdoc-directory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+        .gcdoc-member-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.85rem 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+        .gcdoc-member-name { font-weight: 600; font-size: 1rem; margin-bottom: 0.15rem; }
+        .gcdoc-member-family { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.3rem; }
+        .gcdoc-member-type { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin-bottom: 0.5rem; }
+        .gcdoc-member-contact { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.9rem; border-top: 1px solid #f3f4f6; padding-top: 0.5rem; }
+        .gcdoc-member-contact a { color: #2563eb; text-decoration: none; }
+        .gcdoc-member-contact a:hover { text-decoration: underline; }
     </style>
     <?php
 }

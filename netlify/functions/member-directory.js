@@ -40,7 +40,8 @@ export async function handler(event) {
           familyName: [data.FirstName2, data.LastName2].filter(Boolean).join(' '),
           email: data.Email || '',
           phone: data.Phone1 || '',
-          membershipType: data.MembershipType || ''
+          membershipType: data.MembershipType || '',
+          joined: data.Joined || ''
         }
       })
       .filter((m) => m.email && !['inactive', 'nonmember'].includes(m.membershipType.toLowerCase()))
