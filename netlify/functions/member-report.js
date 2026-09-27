@@ -50,7 +50,11 @@ export async function handler(event) {
 
   try {
     const db = getDb()
-    const snap = await db.collection('logs').where('MemberEmail', '==', email).get()
+    const [snap, memberSnap] = await Promise.all([
+      db.collection('logs').where('MemberEmail', '==', email).get(),
+      db.collection('members').where('Email', '==', email).limit(1).get()
+    ])
+    const membershipType = memberSnap.docs[0]?.data()?.MembershipType || ''
 
     const logs = snap.docs
       .map((d) => {
@@ -88,6 +92,14 @@ export async function handler(event) {
 
     const currentFyStartYear = getFiscalYearForDate(new Date()).startYear
     const currentFy = fiscalYears.find((fy) => fy.label.startsWith(String(currentFyStartYear)))
+
+    // Dues keep showing against the prior FY for 3 months after it ends (through Dec 31),
+    // so members aren't hit with a new FY's requirements before they've paid the old one.
+    const duesDate = new Date()
+    duesDate.setMonth(duesDate.getMonth() - 3)
+    const duesFyStartYear = getFiscalYearForDate(duesDate).startYear
+    const duesFy = fiscalYears.find((fy) => fy.label.startsWith(String(duesFyStartYear)))
+
     const totalHours = logs.reduce((sum, l) => sum + l.hours, 0)
 
     return {
@@ -95,10 +107,13 @@ export async function handler(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
+        membershipType,
         // Kept for backward compatibility with the current-year-only display.
         fiscalYear: currentFy?.label || '',
         fiscalYearHours: currentFy?.hours || 0,
         vouchers: currentFy?.vouchers || 0,
+        duesFiscalYear: duesFy?.label || '',
+        duesFiscalYearHours: duesFy?.hours || 0,
         totalHours: Math.round(totalHours * 100) / 100,
         fiscalYears,
         logs

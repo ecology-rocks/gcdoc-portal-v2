@@ -59,6 +59,73 @@ function gcdoc_fetch_member_directory() {
     return gcdoc_call_report_endpoint(GCDOC_DIRECTORY_ENDPOINT, []);
 }
 
+// Dues schedule is based on membership type and hours logged in the current fiscal year.
+function gcdoc_calculate_dues($membership_type, $hours) {
+    $type = strtolower(trim($membership_type));
+
+    if (in_array($type, ['applicant', 'lifetime'], true)) {
+        return ['amount' => 0, 'eligible' => true, 'note' => ''];
+    }
+
+    if ($type === 'associate') {
+        return ['amount' => 20, 'eligible' => true, 'note' => ''];
+    }
+
+    if (in_array($type, ['regular', 'household'], true)) {
+        if ($hours < 20) {
+            return [
+                'amount' => null,
+                'eligible' => false,
+                'note' => 'Not eligible for Regular membership dues at this hour level. You may choose $20 Associate Membership instead.',
+            ];
+        }
+        if ($hours < 30) {
+            return ['amount' => 50, 'eligible' => true, 'note' => ''];
+        }
+        if ($hours < 40) {
+            return ['amount' => 40, 'eligible' => true, 'note' => ''];
+        }
+        if ($hours < 50) {
+            return ['amount' => 30, 'eligible' => true, 'note' => ''];
+        }
+        return ['amount' => 15, 'eligible' => true, 'note' => ''];
+    }
+
+    // Unknown/inactive/nonmember types have no dues schedule to show.
+    return null;
+}
+
+function gcdoc_render_dues_table($membership_type, $hours) {
+    $rows = [
+        ['range' => '< 20 hrs', 'amount' => 'Not eligible &mdash; choose $20 Associate Membership instead', 'min' => 0, 'max' => 20],
+        ['range' => '20 - 29.75 hrs', 'amount' => '$50', 'min' => 20, 'max' => 30],
+        ['range' => '30 - 39.75 hrs', 'amount' => '$40', 'min' => 30, 'max' => 40],
+        ['range' => '40 - 49.75 hrs', 'amount' => '$30', 'min' => 40, 'max' => 50],
+        ['range' => '50+ hrs', 'amount' => '$15', 'min' => 50, 'max' => INF],
+    ];
+
+    ob_start();
+    ?>
+    <table class="gcdoc-dues-table">
+        <thead>
+            <tr><th>Hours Logged (Regular/Household)</th><th>Dues</th></tr>
+        </thead>
+        <tbody>
+            <?php foreach ($rows as $row) : ?>
+                <?php $is_current = strtolower(trim($membership_type)) === 'regular' || strtolower(trim($membership_type)) === 'household'; ?>
+                <?php $is_current = $is_current && $hours >= $row['min'] && $hours < $row['max']; ?>
+                <tr class="<?php echo $is_current ? 'gcdoc-dues-current' : ''; ?>">
+                    <td><?php echo esc_html($row['range']); ?></td>
+                    <td><?php echo wp_kses_post($row['amount']); ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php
+    return ob_get_clean();
+}
+
+
 
 function gcdoc_member_hours_shortcode() {
     if (!is_user_logged_in()) {
@@ -81,8 +148,30 @@ function gcdoc_member_hours_shortcode() {
     }
 
     ob_start();
+    $membership_type = $report['membershipType'] ?? '';
+    $current_fy_hours = $report['duesFiscalYearHours'] ?? 0;
+    $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
     ?>
     <div class="gcdoc-hours-report">
+        <?php if ($dues !== null) : ?>
+            <div class="gcdoc-dues-summary">
+                <h3>Estimated Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
+                <?php if ($dues['eligible']) : ?>
+                    <p class="gcdoc-dues-amount">
+                        Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year, your estimated dues are
+                        <strong><?php echo $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']); ?></strong>.
+                    </p>
+                <?php else : ?>
+                    <p class="gcdoc-dues-amount gcdoc-dues-ineligible">
+                        Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year:
+                        <?php echo wp_kses_post($dues['note']); ?>
+                    </p>
+                <?php endif; ?>
+                <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
+                <p class="gcdoc-dues-disclaimer">This is an estimate only. Final dues are set by the club.</p>
+            </div>
+        <?php endif; ?>
+
         <h3>Volunteer Hours Summary</h3>
         <p><strong>All-time hours:</strong> <?php echo esc_html($report['totalHours']); ?></p>
 
@@ -165,11 +254,22 @@ function gcdoc_member_directory_shortcode() {
         <?php else : ?>
             <div class="gcdoc-directory-grid">
                 <?php foreach ($members as $m) : ?>
+                    <?php
+                    // Prefer the actual WP_User object so plugins that add local avatars
+                    // (Simple Local Avatars, WP User Avatar, etc.) can resolve them by user ID.
+                    $wp_user = get_user_by('email', $m['email']);
+                    $avatar_id = $wp_user ? $wp_user->ID : $m['email'];
+                    ?>
                     <div class="gcdoc-member-card">
-                        <div class="gcdoc-member-name"><?php echo esc_html($m['lastName'] . ', ' . $m['firstName']); ?></div>
-                        <?php if (!empty($m['familyName'])) : ?>
-                            <div class="gcdoc-member-family"><?php echo esc_html($m['familyName']); ?></div>
-                        <?php endif; ?>
+                        <div class="gcdoc-member-header">
+                            <?php echo get_avatar($avatar_id, 48, 'mp', '', ['class' => 'gcdoc-member-avatar']); ?>
+                            <div>
+                                <div class="gcdoc-member-name"><?php echo esc_html($m['lastName'] . ', ' . $m['firstName']); ?></div>
+                                <?php if (!empty($m['familyName'])) : ?>
+                                    <div class="gcdoc-member-family"><?php echo esc_html($m['familyName']); ?></div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                         <div class="gcdoc-member-type">
                             <?php echo esc_html($m['membershipType']); ?>
                             <?php if (!empty($m['joined'])) : ?>
@@ -209,9 +309,19 @@ function gcdoc_hours_styles() {
         .gcdoc-hours-report summary { cursor: pointer; padding: 0.25rem 0; }
         .gcdoc-hours-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
         .gcdoc-hours-table th, .gcdoc-hours-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
+        .gcdoc-dues-summary { border: 1px solid #d1d5db; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #f9fafb; }
+        .gcdoc-dues-summary h3 { margin-top: 0; }
+        .gcdoc-dues-amount { font-size: 1.05rem; }
+        .gcdoc-dues-ineligible { color: #b45309; }
+        .gcdoc-dues-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
+        .gcdoc-dues-table th, .gcdoc-dues-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #e5e7eb; }
+        .gcdoc-dues-current { background: #dbeafe; font-weight: 600; }
+        .gcdoc-dues-disclaimer { font-size: 0.75rem; color: #6b7280; margin-bottom: 0; }
         .gcdoc-directory-search { width: 100%; max-width: 320px; padding: 0.4rem 0.6rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; }
         .gcdoc-directory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
         .gcdoc-member-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.85rem 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+        .gcdoc-member-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.15rem; }
+        .gcdoc-member-avatar { border-radius: 50%; flex-shrink: 0; }
         .gcdoc-member-name { font-weight: 600; font-size: 1rem; margin-bottom: 0.15rem; }
         .gcdoc-member-family { font-size: 0.85rem; color: #6b7280; margin-bottom: 0.3rem; }
         .gcdoc-member-type { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin-bottom: 0.5rem; }
