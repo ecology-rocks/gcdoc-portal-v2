@@ -92,7 +92,7 @@ function gcdoc_calculate_dues($membership_type, $hours) {
             return [
                 'amount' => null,
                 'eligible' => false,
-                'note' => 'Not eligible for Regular membership dues at this hour level. You may choose $20 Associate Membership instead.',
+                'note' => 'You have not logged enough hours for Regular/Household membership dues. Please select the $20 Associate Membership option instead, or contact the membership chair at <a href="mailto:membership@gcdoc.com">membership@gcdoc.com</a> with questions.',
             ];
         }
         if ($hours < 30) {
@@ -184,7 +184,9 @@ function gcdoc_member_hours_shortcode() {
         <?php if ($dues !== null) : ?>
             <div class="gcdoc-dues-summary">
                 <h3>Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
-                <?php if ($dues['eligible']) : ?>
+                <?php if (!empty($report['dues2026Paid'])) : ?>
+                    <p class="gcdoc-dues-amount gcdoc-dues-paid-msg">✓ Your 2026 dues are paid. Thank you!</p>
+                <?php elseif ($dues['eligible']) : ?>
                     <p class="gcdoc-dues-amount">
                         Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year, your dues are
                         <strong><?php echo $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']); ?></strong>.
@@ -196,7 +198,7 @@ function gcdoc_member_hours_shortcode() {
                     </p>
                 <?php endif; ?>
                 <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
-                <?php if ($dues['amount'] !== 0) : ?>
+                <?php if (empty($report['dues2026Paid']) && $dues['amount'] !== 0) : ?>
                     <p class="gcdoc-dues-pay">
                         <a href="<?php echo esc_url(GCDOC_DUES_PAGE_URL); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
                     </p>
@@ -268,8 +270,12 @@ function gcdoc_dues_owed_shortcode() {
         return '';
     }
 
+    if (!empty($report['dues2026Paid'])) {
+        return '<p class="gcdoc-dues-owed"><strong>✓ Your 2026 dues are paid. Thank you!</strong></p>';
+    }
+
     if (!$dues['eligible']) {
-        return '<p class="gcdoc-dues-owed">' . wp_kses_post($dues['note']) . '</p>';
+        return '<p class="gcdoc-dues-owed"><strong>' . wp_kses_post($dues['note']) . '</strong></p>';
     }
 
     $amount = $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']);
@@ -495,6 +501,7 @@ function gcdoc_hours_styles() {
         .gcdoc-dues-summary h3 { margin-top: 0; }
         .gcdoc-dues-amount { font-size: 1.05rem; }
         .gcdoc-dues-ineligible { color: #b45309; }
+        .gcdoc-dues-paid-msg { color: #15803d; font-weight: 700; }
         .gcdoc-dues-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
         .gcdoc-dues-table th, .gcdoc-dues-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #e5e7eb; }
         .gcdoc-dues-current { background: #dbeafe; font-weight: 600; }

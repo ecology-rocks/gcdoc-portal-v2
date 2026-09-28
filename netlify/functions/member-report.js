@@ -54,7 +54,9 @@ export async function handler(event) {
       db.collection('logs').where('MemberEmail', '==', email).get(),
       db.collection('members').where('Email', '==', email).limit(1).get()
     ])
-    const membershipType = memberSnap.docs[0]?.data()?.MembershipType || ''
+    const memberData = memberSnap.docs[0]?.data() || {}
+    const membershipType = memberData.MembershipType || ''
+    const dues2026Paid = Boolean(memberData.Dues2026Paid)
 
     const logs = snap.docs
       .map((d) => {
@@ -114,6 +116,7 @@ export async function handler(event) {
         vouchers: currentFy?.vouchers || 0,
         duesFiscalYear: duesFy?.label || '',
         duesFiscalYearHours: duesFy?.hours || 0,
+        dues2026Paid,
         totalHours: Math.round(totalHours * 100) / 100,
         fiscalYears,
         logs
