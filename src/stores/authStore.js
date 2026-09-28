@@ -1,19 +1,14 @@
 import { defineStore } from 'pinia'
 import { auth, db } from '@/firebase'
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  sendSignInLinkToEmail,
-  isSignInWithEmailLink,
-  signInWithEmailLink
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
 } from 'firebase/auth'
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 
 const KIOSK_EMAIL = 'kiosk@gcdoc.com'
 const SUPER_ADMIN_EMAIL = 'reallyjustsam@gmail.com'
-const EMAIL_LINK_STORAGE_KEY = 'gcdoc-email-link-signin'
 
 const normalizeEmailInput = (value) => {
   const normalized = String(value || '').trim().toLowerCase()
@@ -21,19 +16,6 @@ const normalizeEmailInput = (value) => {
     return ''
   }
   return normalized
-}
-
-const isValidEmail = (value) => {
-  return /.+@.+\..+/.test(value)
-}
-
-const getEmailFromUrl = (url) => {
-  try {
-    const parsed = new URL(url)
-    return normalizeEmailInput(parsed.searchParams.get('email') || '')
-  } catch {
-    return ''
-  }
 }
 
 const isPermissionDeniedError = (error) => {
@@ -64,12 +46,8 @@ export const useAuthStore = defineStore('auth', {
 
     isAdmin() {
       // Keep the super-admin override for safety
-      const isSuperUser = this.user?.email?.toLowerCase() === 'reallyjustsam@gmail.com'
+      const isSuperUser = this.user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL
       return isSuperUser || this.hasRole('admin')
-    },
-
-    isRegistrar() {
-      return this.isAdmin || this.hasRole('registrar')
     }
   },
 
@@ -218,149 +196,6 @@ export const useAuthStore = defineStore('auth', {
       this.authError = null
       try {
         await signInWithEmailAndPassword(auth, email, password)
-      } catch (e) {
-        this.authError = e.message
-        throw e
-      }
-    },
-
-    async getLoginMethodForEmail(email) {
-      const normalizedEmail = email?.trim().toLowerCase()
-      if (!normalizedEmail) {
-        throw new Error('Please enter an email address.')
-      }
-
-      if (normalizedEmail === KIOSK_EMAIL || normalizedEmail === SUPER_ADMIN_EMAIL) {
-        return 'password'
-      }
-
-      let memberData = null
-
-      try {
-        const docRef = doc(db, 'members', normalizedEmail)
-        const snap = await getDoc(docRef)
-
-        if (snap.exists()) {
-          memberData = snap.data()
-        } else {
-          const fallbackQ = query(collection(db, 'members'), where('Email', '==', normalizedEmail))
-          const fallbackSnap = await getDocs(fallbackQ)
-          if (!fallbackSnap.empty) {
-            memberData = fallbackSnap.docs[0].data()
-          }
-        }
-      } catch (e) {
-        if (isPermissionDeniedError(e)) {
-          // If role lookup is blocked by rules, default to passwordless for non-privileged hardcoded accounts.
-          return 'email-link'
-        }
-        throw e
-      }
-
-      if (!memberData) {
-        return 'email-link'
-      }
-
-      let roles = []
-      if (Array.isArray(memberData.roles)) {
-        roles = memberData.roles.map(r => String(r).toLowerCase())
-      } else if (memberData.Role) {
-        roles = [String(memberData.Role).toLowerCase()]
-      }
-
-      if (roles.includes('admin') || roles.includes('registrar')) {
-        return 'password'
-      }
-
-      return 'email-link'
-    },
-
-    async sendPasswordlessLink(email) {
-      this.authError = null
-      const normalizedEmail = normalizeEmailInput(email)
-
-      if (!normalizedEmail) {
-        const err = new Error('Please enter an email address.')
-        this.authError = err.message
-        throw err
-      }
-
-      try {
-        const signInUrl = new URL('/login', window.location.origin)
-        signInUrl.searchParams.set('email', normalizedEmail)
-
-        await sendSignInLinkToEmail(auth, normalizedEmail, {
-          url: signInUrl.toString(),
-          handleCodeInApp: true
-        })
-        window.localStorage.setItem(EMAIL_LINK_STORAGE_KEY, normalizedEmail)
-      } catch (e) {
-        this.authError = e.message
-        throw e
-      }
-    },
-
-    getPendingPasswordlessEmail() {
-      const emailFromStorage = window.localStorage.getItem(EMAIL_LINK_STORAGE_KEY) || ''
-      return normalizeEmailInput(emailFromStorage)
-    },
-
-    resolvePasswordlessEmail(url, emailOverride = '') {
-      const overrideEmail = normalizeEmailInput(emailOverride)
-      if (overrideEmail) return overrideEmail
-
-      const emailFromUrl = getEmailFromUrl(url)
-      if (emailFromUrl) return emailFromUrl
-
-      return this.getPendingPasswordlessEmail()
-    },
-
-    isPasswordlessLink(url) {
-      return isSignInWithEmailLink(auth, url)
-    },
-
-    async completePasswordlessSignIn(url, emailOverride = '') {
-      this.authError = null
-      const normalizedEmail = this.resolvePasswordlessEmail(url, emailOverride)
-
-      if (!normalizedEmail) {
-        const err = new Error('Please enter your email to finish sign in.')
-        this.authError = err.message
-        throw err
-      }
-
-      if (!isValidEmail(normalizedEmail)) {
-        const err = new Error('Please enter the same valid email used to request the sign-in link.')
-        this.authError = err.message
-        throw err
-      }
-
-      try {
-        const credential = await signInWithEmailLink(auth, normalizedEmail, url)
-        this.user = credential.user
-        await this.fetchProfile(credential.user?.email || normalizedEmail, credential.user?.uid || '')
-        window.localStorage.removeItem(EMAIL_LINK_STORAGE_KEY)
-      } catch (e) {
-        this.authError = e.message
-        throw e
-      }
-    },
-
-    async register(email, password) {
-      this.authError = null
-      const docRef = doc(db, 'members', email.toLowerCase())
-      const snap = await getDoc(docRef)
-      
-      if (!snap.exists()) {
-        throw new Error("Email not found in member roster. Please contact admin.")
-      }
-
-      try {
-        const cred = await createUserWithEmailAndPassword(auth, email, password)
-        await updateDoc(docRef, {
-          authUid: cred.user.uid,
-          emailVerified: true 
-        })
       } catch (e) {
         this.authError = e.message
         throw e

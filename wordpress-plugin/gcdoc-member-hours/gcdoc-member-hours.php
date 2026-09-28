@@ -12,7 +12,10 @@ if (!defined('ABSPATH')) {
 // Set these in wp-config.php - never hard-code the secret here.
 // define('GCDOC_REPORT_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-report');
 // define('GCDOC_DIRECTORY_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-directory');
+// define('GCDOC_LOG_SUBMIT_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-log-submit');
 // define('GCDOC_REPORT_SECRET', 'a-long-random-shared-secret');
+
+define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/product/membership-dues/');
 
 function gcdoc_call_report_endpoint($endpoint, $body) {
     if (!defined('GCDOC_REPORT_SECRET')) {
@@ -59,6 +62,19 @@ function gcdoc_fetch_member_directory() {
     return gcdoc_call_report_endpoint(GCDOC_DIRECTORY_ENDPOINT, []);
 }
 
+function gcdoc_submit_member_log($email, $date, $activity, $type, $clock_hours) {
+    if (!defined('GCDOC_LOG_SUBMIT_ENDPOINT')) {
+        return new WP_Error('gcdoc_config', 'GCDOC_LOG_SUBMIT_ENDPOINT is not configured in wp-config.php.');
+    }
+    return gcdoc_call_report_endpoint(GCDOC_LOG_SUBMIT_ENDPOINT, [
+        'email' => $email,
+        'date' => $date,
+        'activity' => $activity,
+        'type' => $type,
+        'clockHours' => $clock_hours,
+    ]);
+}
+
 // Dues schedule is based on membership type and hours logged in the current fiscal year.
 function gcdoc_calculate_dues($membership_type, $hours) {
     $type = strtolower(trim($membership_type));
@@ -95,6 +111,29 @@ function gcdoc_calculate_dues($membership_type, $hours) {
     return null;
 }
 
+// Shared by any shortcode that needs the current user's report (hours, dues owed, etc.)
+function gcdoc_get_member_report_cached() {
+    if (!is_user_logged_in()) {
+        return new WP_Error('gcdoc_not_logged_in', 'Please log in to view this content.');
+    }
+
+    $user = wp_get_current_user();
+    $email = sanitize_email($user->user_email);
+
+    $cache_key = 'gcdoc_hours_' . md5($email);
+    $report = get_transient($cache_key);
+
+    if ($report === false) {
+        $report = gcdoc_fetch_member_report($email);
+        if (is_wp_error($report)) {
+            return $report;
+        }
+        set_transient($cache_key, $report, 5 * MINUTE_IN_SECONDS);
+    }
+
+    return $report;
+}
+
 function gcdoc_render_dues_table($membership_type, $hours) {
     $rows = [
         ['range' => '< 20 hrs', 'amount' => 'Not eligible &mdash; choose $20 Associate Membership instead', 'min' => 0, 'max' => 20],
@@ -128,23 +167,12 @@ function gcdoc_render_dues_table($membership_type, $hours) {
 
 
 function gcdoc_member_hours_shortcode() {
-    if (!is_user_logged_in()) {
-        return '<p>Please log in to view your volunteer hours.</p>';
-    }
-
-    $user = wp_get_current_user();
-    $email = sanitize_email($user->user_email);
-
-    // Cache per-user for a few minutes to avoid hammering the endpoint on every page load.
-    $cache_key = 'gcdoc_hours_' . md5($email);
-    $report = get_transient($cache_key);
-
-    if ($report === false) {
-        $report = gcdoc_fetch_member_report($email);
-        if (is_wp_error($report)) {
-            return '<p>Unable to load your hours right now. Please try again later.</p>';
+    $report = gcdoc_get_member_report_cached();
+    if (is_wp_error($report)) {
+        if ($report->get_error_code() === 'gcdoc_not_logged_in') {
+            return '<p>Please log in to view your volunteer hours.</p>';
         }
-        set_transient($cache_key, $report, 5 * MINUTE_IN_SECONDS);
+        return '<p>Unable to load your hours right now. Please try again later.</p>';
     }
 
     ob_start();
@@ -155,10 +183,10 @@ function gcdoc_member_hours_shortcode() {
     <div class="gcdoc-hours-report">
         <?php if ($dues !== null) : ?>
             <div class="gcdoc-dues-summary">
-                <h3>Estimated Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
+                <h3>Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
                 <?php if ($dues['eligible']) : ?>
                     <p class="gcdoc-dues-amount">
-                        Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year, your estimated dues are
+                        Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year, your dues are
                         <strong><?php echo $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']); ?></strong>.
                     </p>
                 <?php else : ?>
@@ -168,7 +196,11 @@ function gcdoc_member_hours_shortcode() {
                     </p>
                 <?php endif; ?>
                 <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
-                <p class="gcdoc-dues-disclaimer">This is an estimate only. Final dues are set by the club.</p>
+                <?php if ($dues['amount'] !== 0) : ?>
+                    <p class="gcdoc-dues-pay">
+                        <a href="<?php echo esc_url(GCDOC_DUES_PAGE_URL); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
+                    </p>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
@@ -217,6 +249,34 @@ function gcdoc_member_hours_shortcode() {
     return ob_get_clean();
 }
 add_shortcode('gcdoc_hours', 'gcdoc_member_hours_shortcode');
+
+// A short bolded line for the dues product page itself: "Your dues owed are $X..."
+function gcdoc_dues_owed_shortcode() {
+    $report = gcdoc_get_member_report_cached();
+    if (is_wp_error($report)) {
+        if ($report->get_error_code() === 'gcdoc_not_logged_in') {
+            return '<p class="gcdoc-dues-owed">Please log in to see your dues amount.</p>';
+        }
+        return '<p class="gcdoc-dues-owed">Unable to load your dues amount right now. Please try again later.</p>';
+    }
+
+    $membership_type = $report['membershipType'] ?? '';
+    $current_fy_hours = $report['duesFiscalYearHours'] ?? 0;
+    $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
+
+    if ($dues === null) {
+        return '';
+    }
+
+    if (!$dues['eligible']) {
+        return '<p class="gcdoc-dues-owed">' . wp_kses_post($dues['note']) . '</p>';
+    }
+
+    $amount = $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']);
+
+    return '<p class="gcdoc-dues-owed"><strong>Your dues owed are ' . $amount . '. Please select the correct option on the form below.</strong></p>';
+}
+add_shortcode('gcdoc_dues_owed', 'gcdoc_dues_owed_shortcode');
 
 function gcdoc_member_directory_shortcode() {
     if (!is_user_logged_in()) {
@@ -301,6 +361,128 @@ function gcdoc_member_directory_shortcode() {
 }
 add_shortcode('gcdoc_directory', 'gcdoc_member_directory_shortcode');
 
+function gcdoc_log_hours_shortcode() {
+    if (!is_user_logged_in()) {
+        return '<p>Please log in to log volunteer hours.</p>';
+    }
+
+    $nonce = wp_create_nonce('gcdoc_log_hours');
+    $today = date_i18n('Y-m-d');
+    ob_start();
+    ?>
+    <div class="gcdoc-log-hours">
+        <form id="gcdoc-log-hours-form">
+            <input type="hidden" name="nonce" value="<?php echo esc_attr($nonce); ?>">
+
+            <div class="gcdoc-form-row">
+                <label for="gcdoc-log-date">Date</label>
+                <input type="date" id="gcdoc-log-date" name="date" value="<?php echo esc_attr($today); ?>" max="<?php echo esc_attr($today); ?>" required>
+            </div>
+
+            <div class="gcdoc-form-row">
+                <label for="gcdoc-log-activity">Activity</label>
+                <input type="text" id="gcdoc-log-activity" name="activity" placeholder="e.g. Trial helper, Grounds cleanup" required>
+            </div>
+
+            <div class="gcdoc-form-row">
+                <label for="gcdoc-log-type">Type</label>
+                <select id="gcdoc-log-type" name="type">
+                    <option value="STANDARD">Standard / Regular (1x)</option>
+                    <option value="MAINT">Cleaning / Maintenance (2x + Blue Ribbon)</option>
+                    <option value="SETUP">Trial Setup / Teardown (2x)</option>
+                </select>
+            </div>
+
+            <div class="gcdoc-form-row">
+                <label for="gcdoc-log-hours">Hours Worked</label>
+                <input type="number" id="gcdoc-log-hours" name="clockHours" step="0.25" min="0.25" required>
+            </div>
+
+            <button type="submit" class="gcdoc-log-submit">Submit Hours</button>
+            <p class="gcdoc-log-message" role="status"></p>
+        </form>
+    </div>
+    <script>
+        (function () {
+            var form = document.getElementById('gcdoc-log-hours-form');
+            if (!form) return;
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var msg = form.querySelector('.gcdoc-log-message');
+                var button = form.querySelector('.gcdoc-log-submit');
+                msg.textContent = '';
+                msg.className = 'gcdoc-log-message';
+                button.disabled = true;
+                button.textContent = 'Submitting...';
+
+                var data = new FormData(form);
+                data.append('action', 'gcdoc_log_hours');
+
+                fetch('<?php echo esc_url(admin_url('admin-ajax.php')); ?>', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    body: data,
+                })
+                    .then(function (res) { return res.json(); })
+                    .then(function (json) {
+                        button.disabled = false;
+                        button.textContent = 'Submit Hours';
+                        if (json.success) {
+                            msg.textContent = 'Hours submitted for approval. Thank you!';
+                            msg.className = 'gcdoc-log-message gcdoc-log-success';
+                            form.reset();
+                            document.getElementById('gcdoc-log-date').value = '<?php echo esc_js($today); ?>';
+                        } else {
+                            msg.textContent = (json.data && json.data.message) || 'Something went wrong. Please try again.';
+                            msg.className = 'gcdoc-log-message gcdoc-log-error';
+                        }
+                    })
+                    .catch(function () {
+                        button.disabled = false;
+                        button.textContent = 'Submit Hours';
+                        msg.textContent = 'Network error. Please try again.';
+                        msg.className = 'gcdoc-log-message gcdoc-log-error';
+                    });
+            });
+        })();
+    </script>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('gcdoc_log_hours', 'gcdoc_log_hours_shortcode');
+
+function gcdoc_ajax_log_hours() {
+    if (!is_user_logged_in()) {
+        wp_send_json_error(['message' => 'Please log in to log volunteer hours.'], 401);
+    }
+
+    check_ajax_referer('gcdoc_log_hours', 'nonce');
+
+    $user = wp_get_current_user();
+    $email = sanitize_email($user->user_email);
+    $date = isset($_POST['date']) ? sanitize_text_field(wp_unslash($_POST['date'])) : '';
+    $activity = isset($_POST['activity']) ? sanitize_text_field(wp_unslash($_POST['activity'])) : '';
+    $type = isset($_POST['type']) ? sanitize_text_field(wp_unslash($_POST['type'])) : 'STANDARD';
+    $clock_hours = isset($_POST['clockHours']) ? floatval($_POST['clockHours']) : 0;
+
+    if (!$activity || $clock_hours <= 0) {
+        wp_send_json_error(['message' => 'Please fill in the activity and a valid number of hours.'], 400);
+    }
+
+    $result = gcdoc_submit_member_log($email, $date, $activity, $type, $clock_hours);
+
+    if (is_wp_error($result)) {
+        wp_send_json_error(['message' => 'Unable to submit your hours right now. Please try again later.'], 502);
+    }
+
+    // Hours changed, so the cached report/hours view should refresh on next load.
+    delete_transient('gcdoc_hours_' . md5($email));
+
+    wp_send_json_success($result);
+}
+add_action('wp_ajax_gcdoc_log_hours', 'gcdoc_ajax_log_hours');
+
 
 function gcdoc_hours_styles() {
     ?>
@@ -316,7 +498,10 @@ function gcdoc_hours_styles() {
         .gcdoc-dues-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
         .gcdoc-dues-table th, .gcdoc-dues-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #e5e7eb; }
         .gcdoc-dues-current { background: #dbeafe; font-weight: 600; }
-        .gcdoc-dues-disclaimer { font-size: 0.75rem; color: #6b7280; margin-bottom: 0; }
+        .gcdoc-dues-pay { margin-top: 0.75rem; margin-bottom: 0; }
+        .gcdoc-pay-dues-btn { display: inline-block; background: #16a34a; color: #fff; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 700; }
+        .gcdoc-pay-dues-btn:hover { background: #15803d; color: #fff; }
+        .gcdoc-dues-owed { font-size: 1.05rem; }
         .gcdoc-directory-search { width: 100%; max-width: 320px; padding: 0.4rem 0.6rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; }
         .gcdoc-directory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
         .gcdoc-member-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.85rem 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
@@ -328,6 +513,15 @@ function gcdoc_hours_styles() {
         .gcdoc-member-contact { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.9rem; border-top: 1px solid #f3f4f6; padding-top: 0.5rem; }
         .gcdoc-member-contact a { color: #2563eb; text-decoration: none; }
         .gcdoc-member-contact a:hover { text-decoration: underline; }
+        .gcdoc-log-hours { max-width: 420px; }
+        .gcdoc-log-hours .gcdoc-form-row { margin-bottom: 0.85rem; }
+        .gcdoc-log-hours label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+        .gcdoc-log-hours input, .gcdoc-log-hours select { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.95rem; box-sizing: border-box; }
+        .gcdoc-log-submit { background: #4f46e5; color: #fff; border: none; padding: 0.6rem 1.1rem; border-radius: 4px; font-weight: 700; cursor: pointer; }
+        .gcdoc-log-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        .gcdoc-log-message { margin-top: 0.6rem; font-size: 0.9rem; min-height: 1.2em; }
+        .gcdoc-log-success { color: #15803d; }
+        .gcdoc-log-error { color: #b91c1c; }
     </style>
     <?php
 }

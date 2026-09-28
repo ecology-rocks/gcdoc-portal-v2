@@ -7,6 +7,7 @@ const store = useMembersStore()
 const logsStore = useLogsStore()
 const search = ref('')
 const selectedType = ref('')
+const unpaidDuesOnly = ref(false)
 const copiedEmail = ref(null)
 const printData = ref(null)
 const showReportModal = ref(false)
@@ -99,7 +100,11 @@ const filteredMembers = computed(() => {
             m.Email?.toLowerCase().includes(q)
         )
     }
-    
+
+    if (unpaidDuesOnly.value) {
+        list = list.filter(m => !m.Dues2026Paid)
+    }
+
     return list.sort((a, b) => {
         const nameA = (a.LastName || '').toLowerCase()
         const nameB = (b.LastName || '').toLowerCase()
@@ -113,6 +118,15 @@ const getFYHours = (email) => {
     if (!email) return 0
     const hrs = logsStore.fiscalYearHours[email.toLowerCase()] || 0
     return Math.round(hrs * 100) / 100
+}
+
+const toggleDuesPaid = async (member) => {
+  try {
+    await store.setDuesPaid(member.Email, !member.Dues2026Paid)
+  } catch (err) {
+    console.error('Failed to update dues status', err)
+    alert('Failed to update dues status.')
+  }
 }
 
 const copyEmail = async (email) => {
@@ -146,6 +160,10 @@ const copyEmail = async (email) => {
                         <option value="">All Types</option>
                         <option v-for="type in uniqueTypes" :key="type" :value="type">{{ type }}</option>
                     </select>
+                    <label class="dues-filter">
+                        <input type="checkbox" v-model="unpaidDuesOnly">
+                        2026 Dues Unpaid Only
+                    </label>
                     <button @click="$router.push('/members/add')" class="btn-add">
                         <span>+</span> Add Member
                     </button>
@@ -164,7 +182,7 @@ const copyEmail = async (email) => {
                     </div>
                     <span class="badge badge-blue">{{ m.MembershipType }}</span>
                 </div>
-                
+
                 <div class="card-body">
                     <button @click="copyEmail(m.Email)" class="btn-copy" :title="'Copy ' + m.Email">
                         <span class="email-text">{{ m.Email }}</span>
@@ -172,6 +190,13 @@ const copyEmail = async (email) => {
                     </button>
                     <div class="secondary-text">{{ m.Phone1 }}</div>
                     <div class="hours-text">FY Hours: <strong>{{ getFYHours(m.Email) }}</strong></div>
+                    <button
+                        @click="toggleDuesPaid(m)"
+                        class="dues-badge"
+                        :class="m.Dues2026Paid ? 'dues-paid' : 'dues-unpaid'"
+                    >
+                        2026 Dues: {{ m.Dues2026Paid ? 'Paid' : 'Not Paid' }}
+                    </button>
                 </div>
 
                 <div class="card-footer">
@@ -375,6 +400,38 @@ const copyEmail = async (email) => {
   gap: 0.5rem;
 }
 .btn-add:hover { background-color: #4338ca; }
+
+.dues-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.dues-badge {
+  margin-top: 0.5rem;
+  display: inline-block;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dues-paid {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.dues-unpaid {
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
 
 /* Grid / Card Layout */
 .members-grid {

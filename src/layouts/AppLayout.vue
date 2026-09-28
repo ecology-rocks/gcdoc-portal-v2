@@ -44,17 +44,6 @@
           <span class="label">Member Directory</span>
         </RouterLink>
 
-        <div v-if="classStore.isTeacher" class="nav-divider">Teacher Tools</div>
-        
-        <RouterLink v-if="classStore.isTeacher" to="/classes" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">🎓</span> My Classes
-        </RouterLink>
-
-        <div v-if="authStore.isRegistrar" class="nav-divider">Registrar</div>
-        <RouterLink v-if="authStore.isRegistrar" to="/registrar" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">📋</span> Registration
-        </RouterLink>
-
         <div v-if="authStore.isAdmin" class="nav-divider">Admin Tools</div>
 
         <template v-if="authStore.isAdmin">
@@ -100,11 +89,9 @@
 import { computed, ref } from 'vue'
 import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
-import { useClassStore } from '@/stores/classStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const classStore = useClassStore()
 
 const resolvedProfile = computed(() => authStore.profile || null)
 

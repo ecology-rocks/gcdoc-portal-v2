@@ -62,29 +62,12 @@
           </div>
         </div>
 
-        <div v-if="authStore.isRegistrar" class="card card-green">
-          <div class="card-body">
-            <div class="card-icon green-bg">
-              <span>📋</span>
-            </div>
-            <div class="card-info">
-              <dt>Registrar</dt>
-              <dd>Manage Classes</dd>
-            </div>
-          </div>
-          <div class="card-footer">
-            <RouterLink to="/registrar" class="link-green">
-              View Class Roster &rarr;
-            </RouterLink>
-          </div>
-        </div>
-
       </div>
     </div>
 
     <div class="section-container">
       <h2 class="section-title">Volunteer Hours</h2>
-      
+
       <div class="volunteer-split-view">
         <div class="split-left">
           <MemberLogWizard />
@@ -96,65 +79,19 @@
 
     </div>
 
-    <div v-if="authStore.isAdmin" class="section-container">
-      <h2 class="section-title">My Classes</h2>
-      <div class="dashboard-grid">
-
-        <div class="card card-purple">
-          <div class="card-body">
-            <div class="card-icon purple-bg">
-              <span>🎒</span>
-            </div>
-            <div class="card-info">
-              <dt>Enrolled Classes</dt>
-              <dd>{{ studentClassCount }} Classes</dd>
-            </div>
-          </div>
-          <div class="card-footer">
-            <RouterLink to="/classes" class="link-purple">
-              View Schedule &rarr;
-            </RouterLink>
-          </div>
-        </div>
-
-        <div v-if="classStore.isTeacher" class="card card-teal">
-          <div class="card-body">
-            <div class="card-icon teal-bg">
-              <span>🍎</span>
-            </div>
-            <div class="card-info">
-              <dt>Instructing</dt>
-              <dd>{{ teacherClassCount }} Classes</dd>
-            </div>
-          </div>
-          <div class="card-footer">
-            <RouterLink to="/classes" class="link-teal">
-              Manage Students &rarr;
-            </RouterLink>
-          </div>
-        </div>
-
-      </div>
-    </div>
-
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/authStore'
-import { useClassStore } from '@/stores/classStore'
 import MemberLogWizard from '@/modules/memberlogs/components/MemberLogWizard.vue'
 import PersonalLogHistory from '@/modules/memberlogs/components/PersonalLogHistory.vue'
 
 const authStore = useAuthStore()
-const classStore = useClassStore()
 
 onMounted(async () => {
   await authStore.ensureProfileLoaded()
-  if (authStore.isAdmin) {
-    classStore.initClasses()
-  }
 })
 
 const welcomeName = computed(() => {
@@ -164,16 +101,7 @@ const welcomeName = computed(() => {
 })
 
 const hasSpecialRole = computed(() => {
-  return authStore.isAdmin || authStore.isRegistrar
-})
-
-// Calculate counts for the Chips
-const studentClassCount = computed(() => {
-  return classStore.myClasses.filter(c => classStore.isStudentOf(c.id)).length
-})
-
-const teacherClassCount = computed(() => {
-  return classStore.myClasses.filter(c => classStore.isTeacherOf(c.id)).length
+  return authStore.isAdmin
 })
 </script>
 

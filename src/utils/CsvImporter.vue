@@ -78,7 +78,6 @@
           <div v-if="activeTab === 'members'">Email, FirstName, LastName, Role, Phone1, Address...</div>
           <div v-if="activeTab === 'logs'">MemberEmail, Date, Hours, Activity, isMaintenance...</div>
           <div v-if="activeTab === 'dogs'">Name, OwnerEmail, Breed, Sex (M/F), Birthdate (YYYY-MM-DD), Neutered (Yes/No)</div>
-          <div v-if="activeTab === 'classes'">Name, Year, Session, Day, Time, Location, Teachers (emails), Students (emails)</div>
         </div>
 
         <input 
@@ -132,9 +131,8 @@ import Papa from 'papaparse'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 import { useDogStore } from '@/stores/dogStore'
-import { useClassStore } from '@/stores/classStore'
 
-const tabs = ['members', 'logs', 'dogs', 'classes']
+const tabs = ['members', 'logs', 'dogs']
 const activeTab = ref('members')
 const parsing = ref(false)
 const uploading = ref(false)
@@ -148,8 +146,7 @@ const transferring = ref(false)
 const stores = {
   members: useMembersStore(),
   logs: useLogsStore(),
-  dogs: useDogStore(),
-  classes: useClassStore()
+  dogs: useDogStore()
 }
 
 watch(activeTab, () => {
@@ -233,7 +230,6 @@ const processImport = async () => {
     }
     alert(`${activeTab.value} Import Complete! Imported ${total} records.`)
     parsedData.value = []
-    if (currentStore.initClasses) await currentStore.initClasses()
     if (currentStore.initMembers) await currentStore.initMembers()
   } catch (e) {
     errorLog.value.push(e.message)

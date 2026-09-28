@@ -8,14 +8,11 @@ import CsvImporter from '@/utils/CsvImporter.vue'
 import MemberForm from '@/modules/members/MemberForm.vue'
 import MemberManager from '@/modules/members/MemberManager.vue' 
 import MeetingView from '@/modules/admin/MeetingView.vue'
-import RegistrarView from '@/modules/admin/RegistrarView.vue' // [NEW IMPORT]
-import ClassDashboard from '@/modules/classes/ClassDashboard.vue'
 import KioskView from '@/views/KioskView.vue'
 import AttendanceSheet from '@/modules/admin/AttendanceSheet.vue'
 import Dashboard from '@/modules/dashboard/Dashboard.vue'
 import WordPressSync from '@/modules/admin/WordPressSync.vue'
 import MemberList from '@/modules/members/MemberList.vue'
-import { useClassStore } from '@/stores/classStore'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -44,10 +41,6 @@ const router = createRouter({
         { path: 'meeting', name: 'meeting', component: MeetingView, meta: { role: 'admin' } },
         { path: 'import', name: 'import', component: CsvImporter, meta: { role: 'admin' } },
         { path: 'meeting/attendance', name: 'attendance', component: AttendanceSheet, meta: { role: 'admin' } },
-        // Registrar / Classes
-        { path: 'registrar', name: 'registrar', component: RegistrarView, meta: { role: 'registrar' } },
-        { path: 'classes', name: 'classes', component: ClassDashboard, meta: { role: 'teacher' } },
-
         // Members
         {
           path: 'members',       
@@ -74,7 +67,6 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
-  const classStore = useClassStore()
   if (authStore.loading) await authStore.init()
 
   if (authStore.user) {
@@ -99,9 +91,7 @@ router.beforeEach(async (to, from, next) => {
   const requiredRole = to.meta.role
   if (requiredRole) {
     const hasAccess =
-      (requiredRole === 'admin' && authStore.isAdmin) ||
-      (requiredRole === 'registrar' && authStore.isRegistrar) ||
-      (requiredRole === 'teacher' && (classStore.isTeacher || authStore.isAdmin))
+      requiredRole === 'admin' && authStore.isAdmin
 
     if (!hasAccess) {
       next('/dashboard')

@@ -96,6 +96,17 @@ export const useMembersStore = defineStore('members', {
       })
     },
 
+    async setDuesPaid(emailId, paid) {
+      const existingMember = this.getMemberByEmail(emailId)
+      const resolvedDocId = normalizeEmail(existingMember?.id || emailId)
+      const docRef = doc(db, 'members', resolvedDocId)
+
+      await updateDoc(docRef, {
+        Dues2026Paid: paid,
+        Dues2026PaidAt: paid ? Timestamp.now() : null
+      })
+    },
+
     async updateMember(emailId, data) {
       const existingMember = this.getMemberByEmail(emailId)
       const resolvedDocId = normalizeEmail(existingMember?.id || emailId)
