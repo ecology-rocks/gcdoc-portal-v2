@@ -39,11 +39,6 @@
           <span class="label">Dashboard</span>
         </RouterLink>
 
-        <RouterLink to="/directory" class="nav-item" active-class="active" @click="closeSidebar">
-          <span class="icon">📇</span>
-          <span class="label">Member Directory</span>
-        </RouterLink>
-
         <div v-if="authStore.isAdmin" class="nav-divider">Admin Tools</div>
 
         <template v-if="authStore.isAdmin">

@@ -102,6 +102,19 @@ export async function handler(event) {
     const duesFyStartYear = getFiscalYearForDate(duesDate).startYear
     const duesFy = fiscalYears.find((fy) => fy.label.startsWith(String(duesFyStartYear)))
 
+    // Members voted in after July 1 skip dues for the FY cycle that starts the following Oct 1 -
+    // e.g. voted in Aug 1, 2026 means no dues owed for the FY starting Oct 1, 2026. Only applies
+    // when a VotedInDate is actually on file; most existing members don't have one recorded.
+    let duesExemptVotedIn = false
+    if (memberData.VotedInDate) {
+      const votedInDate = new Date(memberData.VotedInDate)
+      if (!Number.isNaN(votedInDate.getTime())) {
+        const cutoffStart = new Date(duesFyStartYear, 6, 1) // July 1 of the dues cycle's start year
+        const cycleStart = new Date(duesFyStartYear, 9, 1) // Oct 1 of the dues cycle's start year
+        duesExemptVotedIn = votedInDate >= cutoffStart && votedInDate < cycleStart
+      }
+    }
+
     const totalHours = logs.reduce((sum, l) => sum + l.hours, 0)
 
     return {
@@ -117,6 +130,8 @@ export async function handler(event) {
         duesFiscalYear: duesFy?.label || '',
         duesFiscalYearHours: duesFy?.hours || 0,
         dues2026Paid,
+        votedInDate: memberData.VotedInDate || '',
+        duesExemptVotedIn,
         totalHours: Math.round(totalHours * 100) / 100,
         fiscalYears,
         logs

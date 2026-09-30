@@ -131,6 +131,11 @@
             <input v-model="form.Joined" type="number">
           </div>
           <div class="form-group">
+            <label>Voted In Date</label>
+            <input v-model="form.VotedInDate" type="date">
+            <p class="help-text">If voted in after July 1, dues are automatically waived for the dues cycle that starts the following Oct 1. Leave blank if unknown.</p>
+          </div>
+          <div class="form-group">
             <label>Breeds</label>
             <input v-model="form.Breeds" type="text">
           </div>
@@ -180,7 +185,7 @@ const form = ref({
   Phone3: '', PhoneType3: 'Work',
   Address: '', City: '', State: 'OH', Zip: '',
   MembershipType: 'Applicant', Role: 'member',
-  Joined: new Date().getFullYear(), Breeds: ''
+  Joined: new Date().getFullYear(), VotedInDate: '', Breeds: ''
 })
 
 onMounted(async () => {

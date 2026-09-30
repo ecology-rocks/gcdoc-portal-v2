@@ -1,16 +1,32 @@
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 
 const store = useMembersStore()
 const logsStore = useLogsStore()
+const logType = logsStore.logType
 const search = ref('')
 const selectedType = ref('')
 const unpaidDuesOnly = ref(false)
+const minHours = ref('')
+const maxHours = ref('')
 const copiedEmail = ref(null)
 const printData = ref(null)
 const showReportModal = ref(false)
+
+// --- Add Missing Hours ---
+const addHoursTarget = ref(null)
+const addHoursForm = reactive({
+  Date: new Date().toISOString().split('T')[0],
+  Activity: '',
+  type: logType('STANDARD'),
+  clockHours: ''
+})
+
+// --- Edit Hours (inside View Report) ---
+const editingReportLogId = ref(null)
+const editReportForm = reactive({ Activity: '', Hours: 0, type: logType('STANDARD'), Sport: '' })
 
 onMounted(async () => {
     await Promise.all([
@@ -105,6 +121,14 @@ const filteredMembers = computed(() => {
         list = list.filter(m => !m.Dues2026Paid)
     }
 
+    if (minHours.value !== '' && minHours.value !== null) {
+        list = list.filter(m => getFYHours(m.Email) >= Number(minHours.value))
+    }
+
+    if (maxHours.value !== '' && maxHours.value !== null) {
+        list = list.filter(m => getFYHours(m.Email) <= Number(maxHours.value))
+    }
+
     return list.sort((a, b) => {
         const nameA = (a.LastName || '').toLowerCase()
         const nameB = (b.LastName || '').toLowerCase()
@@ -120,12 +144,102 @@ const getFYHours = (email) => {
     return Math.round(hrs * 100) / 100
 }
 
+// Reflects whatever filters are currently applied, so this doubles as a quick report
+// (e.g. filter to Regular members, or search a name, and the counts update to match).
+const duesSummary = computed(() => {
+    const paid = filteredMembers.value.filter(m => m.Dues2026Paid).length
+    const total = filteredMembers.value.length
+    return { paid, outstanding: total - paid, total }
+})
+
 const toggleDuesPaid = async (member) => {
   try {
     await store.setDuesPaid(member.Email, !member.Dues2026Paid)
   } catch (err) {
     console.error('Failed to update dues status', err)
     alert('Failed to update dues status.')
+  }
+}
+
+// --- Add Missing Hours ---
+const openAddHours = (member) => {
+  addHoursTarget.value = member
+  addHoursForm.Date = new Date().toISOString().split('T')[0]
+  addHoursForm.Activity = ''
+  addHoursForm.type = logType('STANDARD')
+  addHoursForm.clockHours = ''
+}
+
+const closeAddHours = () => {
+  addHoursTarget.value = null
+}
+
+const addHoursCredited = computed(() => {
+  const base = parseFloat(addHoursForm.clockHours) || 0
+  const multiplier = (addHoursForm.type === logType('MAINT') || addHoursForm.type === logType('SETUP')) ? 2 : 1
+  return base * multiplier
+})
+
+const submitAddHours = async () => {
+  const member = addHoursTarget.value
+  if (!member) return
+  if (!addHoursForm.Activity) return alert('Please enter an activity description.')
+  const clockHours = parseFloat(addHoursForm.clockHours)
+  if (!clockHours || clockHours <= 0) return alert('Please enter valid hours.')
+
+  try {
+    await logsStore.addLog({
+      MemberEmail: member.Email,
+      MemberName: `${member.LastName}, ${member.FirstName}`,
+      Date: addHoursForm.Date,
+      Activity: addHoursForm.Activity,
+      type: addHoursForm.type,
+      clockHours,
+      Hours: addHoursCredited.value,
+      Status: 'approved',
+      SourceSheet: ''
+    })
+    closeAddHours()
+    // If the report for this member is open, refresh it so the new entry shows up right away.
+    if (printData.value?.member?.Email === member.Email) generateReportData(member)
+  } catch (err) {
+    console.error('Failed to add hours', err)
+    alert('Failed to add hours.')
+  }
+}
+
+// --- Edit Hours (inside View Report) ---
+const openEditReportLog = (log) => {
+  editingReportLogId.value = log.id
+  editReportForm.Activity = log.Activity
+  editReportForm.Hours = log.clockHours || log.Hours
+  editReportForm.type = log.type || logType('STANDARD')
+  editReportForm.Sport = log.Sport || ''
+}
+
+const cancelEditReportLog = () => {
+  editingReportLogId.value = null
+}
+
+const saveEditReportLog = async () => {
+  const multiplier = (editReportForm.type === logType('MAINT') || editReportForm.type === logType('SETUP')) ? 2 : 1
+  const enteredHours = parseFloat(editReportForm.Hours) || 0
+  const creditedHours = enteredHours * multiplier
+
+  try {
+    await logsStore.updateLog(editingReportLogId.value, {
+      Activity: editReportForm.Activity,
+      Hours: creditedHours,
+      clockHours: enteredHours,
+      type: editReportForm.type,
+      Sport: editReportForm.Sport
+    })
+    editingReportLogId.value = null
+    // Refresh the open report so the table reflects the change immediately.
+    if (printData.value?.member) generateReportData(printData.value.member)
+  } catch (err) {
+    console.error('Failed to save log edit', err)
+    alert('Failed to save changes.')
   }
 }
 
@@ -145,14 +259,14 @@ const copyEmail = async (email) => {
     <div class="manager-layout">
         <div class="manager-header">
             <div>
-                <h1>Member Directory</h1>
+                <h1>Members</h1>
                 <p class="subtitle">{{ filteredMembers.length }} active records found</p>
             </div>
             <div class="actions-wrapper">
                 <div class="actions">
-                    <input 
-                      v-model="search" 
-                      type="text" 
+                    <input
+                      v-model="search"
+                      type="text"
                       placeholder="Search members..."
                       class="search-input"
                     >
@@ -160,6 +274,11 @@ const copyEmail = async (email) => {
                         <option value="">All Types</option>
                         <option v-for="type in uniqueTypes" :key="type" :value="type">{{ type }}</option>
                     </select>
+                    <div class="hours-filter">
+                        <input type="number" v-model="minHours" placeholder="Min hrs" class="hours-input">
+                        <span>&ndash;</span>
+                        <input type="number" v-model="maxHours" placeholder="Max hrs" class="hours-input">
+                    </div>
                     <label class="dues-filter">
                         <input type="checkbox" v-model="unpaidDuesOnly">
                         2026 Dues Unpaid Only
@@ -168,6 +287,21 @@ const copyEmail = async (email) => {
                         <span>+</span> Add Member
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <div class="dues-summary-bar">
+            <div class="dues-stat">
+                <span class="dues-stat-value dues-stat-paid">{{ duesSummary.paid }}</span>
+                <span class="dues-stat-label">Paid</span>
+            </div>
+            <div class="dues-stat">
+                <span class="dues-stat-value dues-stat-outstanding">{{ duesSummary.outstanding }}</span>
+                <span class="dues-stat-label">Outstanding</span>
+            </div>
+            <div class="dues-stat">
+                <span class="dues-stat-value">{{ duesSummary.total }}</span>
+                <span class="dues-stat-label">Total{{ (search || selectedType || unpaidDuesOnly || minHours !== '' || maxHours !== '') ? ' (filtered)' : '' }}</span>
             </div>
         </div>
 
@@ -190,6 +324,7 @@ const copyEmail = async (email) => {
                     </button>
                     <div class="secondary-text">{{ m.Phone1 }}</div>
                     <div class="hours-text">FY Hours: <strong>{{ getFYHours(m.Email) }}</strong></div>
+                    <div v-if="m.VotedInDate" class="secondary-text">Voted In: {{ m.VotedInDate }}</div>
                     <button
                         @click="toggleDuesPaid(m)"
                         class="dues-badge"
@@ -205,6 +340,9 @@ const copyEmail = async (email) => {
                     </button>
                     <button @click="printMemberReport(m)" class="btn-link text-gray">
                         🖨️ Print
+                    </button>
+                    <button @click="openAddHours(m)" class="btn-link text-gray">
+                        ➕ Add Hours
                     </button>
                     <button @click="$router.push(`/members/edit/${m.Email}`)" class="btn-link">
                         Edit
@@ -299,17 +437,41 @@ const copyEmail = async (email) => {
                     <th>Activity</th>
                     <th>Type</th>
                     <th class="text-right">Hours</th>
+                    <th class="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="log in printData.logs" :key="log.id">
-                    <td>{{ formatDate(log.Date) }}</td>
-                    <td>{{ log.Activity }}</td>
-                    <td>{{ log.type }}</td>
-                    <td class="text-right font-bold">{{ log.Hours }}</td>
-                  </tr>
+                  <template v-for="log in printData.logs" :key="log.id">
+                    <tr v-if="editingReportLogId !== log.id">
+                      <td>{{ formatDate(log.Date) }}</td>
+                      <td>{{ log.Activity }}</td>
+                      <td>{{ log.type }}</td>
+                      <td class="text-right font-bold">{{ log.Hours }}</td>
+                      <td class="text-right">
+                        <button @click="openEditReportLog(log)" class="btn-icon" title="Edit">✏️</button>
+                      </td>
+                    </tr>
+                    <tr v-else class="edit-row">
+                      <td>{{ formatDate(log.Date) }}</td>
+                      <td><input v-model="editReportForm.Activity" class="form-input-sm"></td>
+                      <td>
+                        <select v-model="editReportForm.type" class="form-input-sm">
+                          <option :value="logType('STANDARD')">Standard</option>
+                          <option :value="logType('MAINT')">Maintenance</option>
+                          <option :value="logType('SETUP')">Trial Setup</option>
+                        </select>
+                      </td>
+                      <td class="text-right">
+                        <input v-model.number="editReportForm.Hours" type="number" step="0.25" class="form-input-sm hours-input-sm">
+                      </td>
+                      <td class="text-right actions-nowrap">
+                        <button @click="saveEditReportLog" class="btn-icon" title="Save">✅</button>
+                        <button @click="cancelEditReportLog" class="btn-icon" title="Cancel">✕</button>
+                      </td>
+                    </tr>
+                  </template>
                   <tr v-if="printData.logs.length === 0">
-                    <td colspan="4" class="empty-state p-4">No hours logged this fiscal year.</td>
+                    <td colspan="5" class="empty-state p-4">No hours logged this fiscal year.</td>
                   </tr>
                 </tbody>
               </table>
@@ -317,6 +479,9 @@ const copyEmail = async (email) => {
 
             <div class="modal-footer">
               <button @click="closeReportModal" class="btn-cancel">Close</button>
+              <button @click="openAddHours(printData.member)" class="btn-primary">
+                ➕ Add Hours
+              </button>
               <button @click="printMemberReport(printData.member)" class="btn-primary">
                 🖨️ Print Report
               </button>
@@ -324,7 +489,50 @@ const copyEmail = async (email) => {
           </div>
         </div>
 
+        <div v-if="addHoursTarget" class="modal-overlay">
+          <div class="modal-container modal-container-sm">
+            <div class="modal-header">
+              <h2>Add Hours</h2>
+              <button @click="closeAddHours" class="close-btn">✕</button>
+            </div>
 
+            <div class="modal-body">
+              <p class="add-hours-name">{{ addHoursTarget.LastName }}, {{ addHoursTarget.FirstName }}</p>
+
+              <div class="form-group">
+                <label>Date</label>
+                <input v-model="addHoursForm.Date" type="date" class="form-input">
+              </div>
+
+              <div class="form-group">
+                <label>Activity Description</label>
+                <input v-model="addHoursForm.Activity" type="text" class="form-input" placeholder="e.g. Mowing field, Agility trial setup">
+              </div>
+
+              <div class="form-row">
+                <div class="col">
+                  <label>Type</label>
+                  <select v-model="addHoursForm.type" class="form-input">
+                    <option :value="logType('STANDARD')">Standard / Regular (1x)</option>
+                    <option :value="logType('MAINT')">Cleaning / Maintenance (2x)</option>
+                    <option :value="logType('SETUP')">Trial Setup / Teardown (2x)</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label>Clock Hours</label>
+                  <input v-model.number="addHoursForm.clockHours" type="number" step="0.25" min="0" class="form-input" placeholder="Actual time">
+                </div>
+              </div>
+
+              <p class="add-hours-credit">Credited hours: <strong>{{ addHoursCredited }}</strong></p>
+            </div>
+
+            <div class="modal-footer">
+              <button @click="closeAddHours" class="btn-cancel">Cancel</button>
+              <button @click="submitAddHours" class="btn-primary">Save Entry</button>
+            </div>
+          </div>
+        </div>
 
     </div>
 </template>
@@ -410,6 +618,23 @@ const copyEmail = async (email) => {
   white-space: nowrap;
 }
 
+.hours-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.hours-input {
+  width: 70px;
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
 .dues-badge {
   margin-top: 0.5rem;
   display: inline-block;
@@ -431,6 +656,42 @@ const copyEmail = async (email) => {
   background-color: #fef2f2;
   border-color: #fecaca;
   color: #b91c1c;
+}
+
+.dues-summary-bar {
+  display: flex;
+  gap: 1.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.dues-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.dues-stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.dues-stat-paid { color: #15803d; }
+.dues-stat-outstanding { color: #b91c1c; }
+
+.dues-stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.25rem;
+  text-align: center;
 }
 
 /* Grid / Card Layout */
@@ -623,6 +884,57 @@ const copyEmail = async (email) => {
   padding: 1rem;
   backdrop-filter: blur(2px);
 }
+
+.modal-container-sm {
+  max-width: 480px;
+}
+
+.add-hours-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #111827;
+  margin: 0 0 1rem;
+}
+
+.add-hours-credit {
+  background-color: #f9fafb;
+  border: 1px dashed #d1d5db;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin: 0.5rem 0 0;
+}
+
+.form-input-sm {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
+
+.hours-input-sm {
+  width: 70px;
+}
+
+.edit-row { background-color: #eef2ff; }
+.actions-nowrap { white-space: nowrap; }
+.btn-icon { background: none; border: none; cursor: pointer; padding: 0 0.25rem; font-size: 0.95rem; }
+
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: 0.875rem; font-weight: 700; color: #374151; margin-bottom: 0.25rem; }
+.form-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  padding: 0.6rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+.form-row { display: flex; gap: 1rem; margin-bottom: 1rem; }
+.form-row .col { flex: 1; }
 
 .modal-container {
   background: white;

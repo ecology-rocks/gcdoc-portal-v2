@@ -158,6 +158,7 @@ export const useMembersStore = defineStore('members', {
             // Club Data
             MembershipType: row['MembershipType'] || 'Applicant',
             Joined: row['Joined'] || '',
+            VotedInDate: row['VotedInDate'] || '',
             Role: row['Role'] || 'member',
             LegacyKey: row['LegacyKey'] || row['ID'] || '',
             Breeds: row['Breeds'] || '',
@@ -240,6 +241,7 @@ export const useMembersStore = defineStore('members', {
         LegacyKey: m.LegacyKey,
         MembershipType: m.MembershipType,
         Joined: m.Joined,
+        VotedInDate: m.VotedInDate,
         Role: m.Role,
         Breeds: m.Breeds
       }))

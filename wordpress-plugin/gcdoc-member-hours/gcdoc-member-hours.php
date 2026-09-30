@@ -15,7 +15,19 @@ if (!defined('ABSPATH')) {
 // define('GCDOC_LOG_SUBMIT_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-log-submit');
 // define('GCDOC_REPORT_SECRET', 'a-long-random-shared-secret');
 
-define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/product/membership-dues/');
+define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/2026-dues');
+define('GCDOC_HOURS_ENTRY_URL', 'https://gcdoc.com/member-hours-entry/');
+define('GCDOC_LOGIN_URL', 'https://gcdoc.com/membership-login');
+
+function gcdoc_login_prompt($message) {
+    // Send the user back to whatever page they were actually trying to reach (e.g. the dues page)
+    // after they log in, rather than always dropping them on a fixed page. WPUM (and core WP login)
+    // both honor the redirect_to parameter.
+    $current_url = esc_url_raw(home_url(add_query_arg([], $_SERVER['REQUEST_URI'] ?? '')));
+    $login_url = add_query_arg('redirect_to', rawurlencode($current_url), GCDOC_LOGIN_URL);
+
+    return '<p class="gcdoc-login-prompt">' . esc_html($message) . ' <a href="' . esc_url($login_url) . '">Log in here</a>.</p>';
+}
 
 function gcdoc_call_report_endpoint($endpoint, $body) {
     if (!defined('GCDOC_REPORT_SECRET')) {
@@ -121,7 +133,10 @@ function gcdoc_get_member_report_cached() {
     $email = sanitize_email($user->user_email);
 
     $cache_key = 'gcdoc_hours_' . md5($email);
-    $report = get_transient($cache_key);
+    // Append ?gcdoc_refresh=1 (as an admin) to bypass this transient and pull straight from Netlify -
+    // useful for confirming whether stale data is this 5-minute cache or a page/CDN cache in front of it.
+    $force_refresh = current_user_can('manage_options') && isset($_GET['gcdoc_refresh']);
+    $report = $force_refresh ? false : get_transient($cache_key);
 
     if ($report === false) {
         $report = gcdoc_fetch_member_report($email);
@@ -170,7 +185,7 @@ function gcdoc_member_hours_shortcode() {
     $report = gcdoc_get_member_report_cached();
     if (is_wp_error($report)) {
         if ($report->get_error_code() === 'gcdoc_not_logged_in') {
-            return '<p>Please log in to view your volunteer hours.</p>';
+            return gcdoc_login_prompt('Please log in to view your volunteer hours');
         }
         return '<p>Unable to load your hours right now. Please try again later.</p>';
     }
@@ -179,28 +194,50 @@ function gcdoc_member_hours_shortcode() {
     $membership_type = $report['membershipType'] ?? '';
     $current_fy_hours = $report['duesFiscalYearHours'] ?? 0;
     $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
+
+    // Voted in after July 1 -> no dues owed for the cycle that starts the following Oct 1,
+    // regardless of membership type or hours. Only kicks in when a VotedInDate is on file.
+    $voted_in_exempt = !empty($report['duesExemptVotedIn']);
+    if ($voted_in_exempt) {
+        $dues = ['amount' => 0, 'eligible' => true, 'note' => ''];
+    }
+
+    // Applicant/Lifetime dues are $0, but they still need to "buy" the product to sign the waiver,
+    // so paid/unpaid status is driven entirely by the Dues2026Paid flag, same as every other type.
+    if (!empty($report['dues2026Paid'])) {
+        $dues_state_class = 'gcdoc-dues-owed-paid';
+    } elseif ($dues && !$dues['eligible']) {
+        $dues_state_class = 'gcdoc-dues-owed-ineligible';
+    } else {
+        $dues_state_class = 'gcdoc-dues-owed-unpaid';
+    }
     ?>
     <div class="gcdoc-hours-report">
         <?php if ($dues !== null) : ?>
-            <div class="gcdoc-dues-summary">
+            <div class="gcdoc-dues-summary gcdoc-dues-owed <?php echo esc_attr($dues_state_class); ?>">
                 <h3>Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
                 <?php if (!empty($report['dues2026Paid'])) : ?>
-                    <p class="gcdoc-dues-amount gcdoc-dues-paid-msg">✓ Your 2026 dues are paid. Thank you!</p>
+                    <p class="gcdoc-dues-amount">✓ Your 2026 dues are paid. Thank you!</p>
+                <?php elseif ($voted_in_exempt) : ?>
+                    <p class="gcdoc-dues-amount">
+                        You were voted in on <?php echo esc_html($report['votedInDate']); ?> (after July 1), so no dues are owed for this cycle.
+                    </p>
                 <?php elseif ($dues['eligible']) : ?>
                     <p class="gcdoc-dues-amount">
                         Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year, your dues are
-                        <strong><?php echo $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']); ?></strong>.
+                        <strong>$<?php echo esc_html($dues['amount']); ?></strong>.
                     </p>
                 <?php else : ?>
-                    <p class="gcdoc-dues-amount gcdoc-dues-ineligible">
+                    <p class="gcdoc-dues-amount">
                         Based on <?php echo esc_html($current_fy_hours); ?> hrs logged this fiscal year:
                         <?php echo wp_kses_post($dues['note']); ?>
                     </p>
                 <?php endif; ?>
                 <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
-                <?php if (empty($report['dues2026Paid']) && $dues['amount'] !== 0) : ?>
+                <?php if (empty($report['dues2026Paid'])) : ?>
                     <p class="gcdoc-dues-pay">
                         <a href="<?php echo esc_url(GCDOC_DUES_PAGE_URL); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
+                        <a href="<?php echo esc_url(GCDOC_HOURS_ENTRY_URL); ?>" class="gcdoc-enter-hours-btn">Enter Missing Hours</a>
                     </p>
                 <?php endif; ?>
             </div>
@@ -257,9 +294,9 @@ function gcdoc_dues_owed_shortcode() {
     $report = gcdoc_get_member_report_cached();
     if (is_wp_error($report)) {
         if ($report->get_error_code() === 'gcdoc_not_logged_in') {
-            return '<p class="gcdoc-dues-owed">Please log in to see your dues amount.</p>';
+            return gcdoc_login_prompt('Please log in to see and pay your dues');
         }
-        return '<p class="gcdoc-dues-owed">Unable to load your dues amount right now. Please try again later.</p>';
+        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">Unable to load your dues amount right now. Please try again later.</p>';
     }
 
     $membership_type = $report['membershipType'] ?? '';
@@ -270,23 +307,30 @@ function gcdoc_dues_owed_shortcode() {
         return '';
     }
 
+    $voted_in_exempt = !empty($report['duesExemptVotedIn']);
+    if ($voted_in_exempt) {
+        $dues = ['amount' => 0, 'eligible' => true, 'note' => ''];
+    }
+
     if (!empty($report['dues2026Paid'])) {
-        return '<p class="gcdoc-dues-owed"><strong>✓ Your 2026 dues are paid. Thank you!</strong></p>';
+        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-paid">✓ Your 2026 dues are paid. Thank you!</p>';
+    }
+
+    if ($voted_in_exempt) {
+        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">You were voted in on ' . esc_html($report['votedInDate']) . ' (after July 1), so no dues are owed for this cycle. Please select the correct option on the form below.</p>';
     }
 
     if (!$dues['eligible']) {
-        return '<p class="gcdoc-dues-owed"><strong>' . wp_kses_post($dues['note']) . '</strong></p>';
+        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-ineligible">' . wp_kses_post($dues['note']) . '</p>';
     }
 
-    $amount = $dues['amount'] === 0 ? '$0' : '$' . esc_html($dues['amount']);
-
-    return '<p class="gcdoc-dues-owed"><strong>Your dues owed are ' . $amount . '. Please select the correct option on the form below.</strong></p>';
+    return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">Your dues owed are $' . esc_html($dues['amount']) . '. Please select the correct option on the form below.</p>';
 }
 add_shortcode('gcdoc_dues_owed', 'gcdoc_dues_owed_shortcode');
 
 function gcdoc_member_directory_shortcode() {
     if (!is_user_logged_in()) {
-        return '<p>Please log in to view the member directory.</p>';
+        return gcdoc_login_prompt('Please log in to view the member directory');
     }
 
     // Shared across all users since the directory content is the same for everyone.
@@ -369,7 +413,7 @@ add_shortcode('gcdoc_directory', 'gcdoc_member_directory_shortcode');
 
 function gcdoc_log_hours_shortcode() {
     if (!is_user_logged_in()) {
-        return '<p>Please log in to log volunteer hours.</p>';
+        return gcdoc_login_prompt('Please log in to log volunteer hours');
     }
 
     $nonce = wp_create_nonce('gcdoc_log_hours');
@@ -497,18 +541,31 @@ function gcdoc_hours_styles() {
         .gcdoc-hours-report summary { cursor: pointer; padding: 0.25rem 0; }
         .gcdoc-hours-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
         .gcdoc-hours-table th, .gcdoc-hours-table td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; }
-        .gcdoc-dues-summary { border: 1px solid #d1d5db; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; background: #f9fafb; }
         .gcdoc-dues-summary h3 { margin-top: 0; }
-        .gcdoc-dues-amount { font-size: 1.05rem; }
-        .gcdoc-dues-ineligible { color: #b45309; }
-        .gcdoc-dues-paid-msg { color: #15803d; font-weight: 700; }
+        .gcdoc-dues-amount { font-size: 1.05rem; font-weight: 400; }
         .gcdoc-dues-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.9rem; }
         .gcdoc-dues-table th, .gcdoc-dues-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #e5e7eb; }
         .gcdoc-dues-current { background: #dbeafe; font-weight: 600; }
-        .gcdoc-dues-pay { margin-top: 0.75rem; margin-bottom: 0; }
-        .gcdoc-pay-dues-btn { display: inline-block; background: #16a34a; color: #fff; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 700; }
-        .gcdoc-pay-dues-btn:hover { background: #15803d; color: #fff; }
-        .gcdoc-dues-owed { font-size: 1.05rem; }
+        .gcdoc-dues-pay { margin-top: 0.75rem; margin-bottom: 0; display: flex; flex-wrap: wrap; gap: 0.6rem; }
+        .gcdoc-pay-dues-btn { display: inline-block; background: #16a34a; color: #fff !important; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 700; }
+        .gcdoc-pay-dues-btn:hover, .gcdoc-pay-dues-btn:focus, .gcdoc-pay-dues-btn:active, .gcdoc-pay-dues-btn:visited { background: #15803d; color: #fff !important; }
+        .gcdoc-enter-hours-btn { display: inline-block; background: #fff; color: #1f2937 !important; text-decoration: none; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 700; border: 2px solid #1f2937; }
+        .gcdoc-enter-hours-btn:hover, .gcdoc-enter-hours-btn:focus, .gcdoc-enter-hours-btn:active, .gcdoc-enter-hours-btn:visited { background: #1f2937; color: #fff !important; }
+        .gcdoc-dues-owed {
+            font-size: 1.2rem;
+            font-weight: 700;
+            line-height: 1.4;
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            border: 2px solid;
+            margin: 1rem 0 1.5rem;
+        }
+        .gcdoc-dues-owed-unpaid { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
+        .gcdoc-dues-owed-paid { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+        .gcdoc-dues-owed-ineligible { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
+        .gcdoc-dues-owed-ineligible a { color: #b91c1c; text-decoration: underline; }
+        .gcdoc-login-prompt { font-weight: 600; }
+        .gcdoc-login-prompt a { color: #2563eb; text-decoration: underline; }
         .gcdoc-directory-search { width: 100%; max-width: 320px; padding: 0.4rem 0.6rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; }
         .gcdoc-directory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
         .gcdoc-member-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.85rem 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }

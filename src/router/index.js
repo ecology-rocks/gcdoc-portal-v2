@@ -12,7 +12,6 @@ import KioskView from '@/views/KioskView.vue'
 import AttendanceSheet from '@/modules/admin/AttendanceSheet.vue'
 import Dashboard from '@/modules/dashboard/Dashboard.vue'
 import WordPressSync from '@/modules/admin/WordPressSync.vue'
-import MemberList from '@/modules/members/MemberList.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,7 +34,6 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: 'dashboard', name: 'dashboard', component: Dashboard },
-        { path: 'directory', name: 'directory', component: MemberList },
         { path: 'wordpress', name: 'wp-sync', component: WordPressSync, meta: { role: 'admin' } },
         { path: 'logs', name: 'logs', component: LogManager, meta: { role: 'admin' } },
         { path: 'meeting', name: 'meeting', component: MeetingView, meta: { role: 'admin' } },
