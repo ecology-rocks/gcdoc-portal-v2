@@ -41,18 +41,53 @@ const formatDate = (val) => {
   return d.toLocaleDateString()
 }
 
-const generateReportData = (member) => {
-  const email = member.Email.toLowerCase()
-  
-  // FY calculations
+// yearsAgo = 0 for the current FY, 1 for the prior FY, etc.
+const getFiscalYearBounds = (yearsAgo = 0) => {
   const now = new Date()
   const currentMonth = now.getMonth()
   const currentYear = now.getFullYear()
-  const startYear = currentMonth >= 9 ? currentYear : currentYear - 1
-  const startDate = new Date(startYear, 9, 1)
-  const endDate = new Date(startYear + 1, 9, 1)
+  const startYear = (currentMonth >= 9 ? currentYear : currentYear - 1) - yearsAgo
+  return {
+    startYear,
+    startDate: new Date(startYear, 9, 1),
+    endDate: new Date(startYear + 1, 9, 1),
+    label: `Oct 1, ${startYear} - Sep 30, ${startYear + 1}`
+  }
+}
 
-  // Filter and sort logs for this specific member in the current FY
+const getClockHoursForLog = (log) => {
+  const rawClock = Number(log.clockHours)
+  if (!Number.isNaN(rawClock) && rawClock > 0) return rawClock
+  const credited = Number(log.Hours) || 0
+  const type = log.type || ''
+  if (type.includes('Cleaning / Maintenance') || type.includes('Trial Setup')) return credited / 2
+  return credited
+}
+
+const getFYHoursForRange = (email, startDate, endDate) => {
+  if (!email) return 0
+  const normalizedEmail = email.toLowerCase()
+  const hrs = logsStore.logs.reduce((sum, log) => {
+    if (log.MemberEmail?.toLowerCase() !== normalizedEmail) return sum
+    const d = log.Date?.toDate ? log.Date.toDate() : new Date(log.Date)
+    if (d >= startDate && d < endDate) return sum + (Number(log.Hours) || 0)
+    return sum
+  }, 0)
+  return Math.round(hrs * 100) / 100
+}
+
+const getLastYearFYHours = (email) => {
+  const bounds = getFiscalYearBounds(1)
+  return getFYHoursForRange(email, bounds.startDate, bounds.endDate)
+}
+
+const reportFYOffset = ref(0)
+
+const generateReportData = (member, yearsAgo = 0) => {
+  const email = member.Email.toLowerCase()
+  const { startYear, startDate, endDate, label } = getFiscalYearBounds(yearsAgo)
+
+  // Filter and sort logs for this specific member in the selected FY
   const memberLogs = logsStore.logs.filter(log => {
     if (!log.MemberEmail || log.MemberEmail.toLowerCase() !== email) return false
     const d = log.Date?.toDate ? log.Date.toDate() : new Date(log.Date)
@@ -63,14 +98,18 @@ const generateReportData = (member) => {
     return dateA - dateB // Chronological order
   })
 
-  // Pull existing calculations from the store
-  const totalHrs = logsStore.fiscalYearHours[email] || 0
-  const stdVouchers = logsStore.vouchersByMember[email] || 0
-  const blueVouchers = logsStore.blueVouchersByMember[email] || 0
+  const totalHrs = memberLogs.reduce((sum, l) => sum + (Number(l.Hours) || 0), 0)
+  const stdVouchers = totalHrs >= 50 ? Math.floor(totalHrs / 25) : 0
+  const blueHours = memberLogs
+    .filter(l => (l.type || '').includes('Cleaning / Maintenance'))
+    .reduce((sum, l) => sum + getClockHoursForLog(l), 0)
+  const blueVouchers = Math.round(blueHours / 8)
 
+  reportFYOffset.value = yearsAgo
   printData.value = {
     member,
-    fyString: `Oct 1, ${startYear} - Sep 30, ${startYear + 1}`,
+    startYear,
+    fyString: label,
     logs: memberLogs,
     totalHrs: Math.round(totalHrs * 100) / 100,
     stdVouchers,
@@ -79,12 +118,17 @@ const generateReportData = (member) => {
 }
 
 const viewMemberReport = (member) => {
-  generateReportData(member)
+  generateReportData(member, 0)
   showReportModal.value = true
 }
 
-const printMemberReport = async (member) => {
-  generateReportData(member)
+const changeReportFY = (yearsAgo) => {
+  if (!printData.value?.member) return
+  generateReportData(printData.value.member, Number(yearsAgo))
+}
+
+const printMemberReport = async (member, yearsAgo = 0) => {
+  generateReportData(member, yearsAgo)
   // Wait for Vue to render the hidden print container
   await nextTick()
   window.print()
@@ -200,8 +244,8 @@ const submitAddHours = async () => {
       SourceSheet: ''
     })
     closeAddHours()
-    // If the report for this member is open, refresh it so the new entry shows up right away.
-    if (printData.value?.member?.Email === member.Email) generateReportData(member)
+    // If the report for this member is open, refresh it (keeping whichever FY is selected) so the new entry shows up right away.
+    if (printData.value?.member?.Email === member.Email) generateReportData(member, reportFYOffset.value)
   } catch (err) {
     console.error('Failed to add hours', err)
     alert('Failed to add hours.')
@@ -236,7 +280,7 @@ const saveEditReportLog = async () => {
     })
     editingReportLogId.value = null
     // Refresh the open report so the table reflects the change immediately.
-    if (printData.value?.member) generateReportData(printData.value.member)
+    if (printData.value?.member) generateReportData(printData.value.member, reportFYOffset.value)
   } catch (err) {
     console.error('Failed to save log edit', err)
     alert('Failed to save changes.')
@@ -324,6 +368,7 @@ const copyEmail = async (email) => {
                     </button>
                     <div class="secondary-text">{{ m.Phone1 }}</div>
                     <div class="hours-text">FY Hours: <strong>{{ getFYHours(m.Email) }}</strong></div>
+                    <div class="hours-text">Last Year FY Hours: <strong>{{ getLastYearFYHours(m.Email) }}</strong></div>
                     <div v-if="m.VotedInDate" class="secondary-text">Voted In: {{ m.VotedInDate }}</div>
                     <button
                         @click="toggleDuesPaid(m)"
@@ -413,6 +458,10 @@ const copyEmail = async (email) => {
               <div class="report-header">
                 <h3>{{ printData.member.FirstName }} {{ printData.member.LastName }}</h3>
                 <p>Fiscal Year: {{ printData.fyString }}</p>
+                <select :value="reportFYOffset" @change="changeReportFY($event.target.value)" class="fy-select">
+                  <option value="0">This Year</option>
+                  <option value="1">Last Year</option>
+                </select>
               </div>
 
               <div class="report-summary">
@@ -482,7 +531,7 @@ const copyEmail = async (email) => {
               <button @click="openAddHours(printData.member)" class="btn-primary">
                 ➕ Add Hours
               </button>
-              <button @click="printMemberReport(printData.member)" class="btn-primary">
+              <button @click="printMemberReport(printData.member, reportFYOffset)" class="btn-primary">
                 🖨️ Print Report
               </button>
             </div>
@@ -979,6 +1028,14 @@ const copyEmail = async (email) => {
 .report-header { text-align: center; margin-bottom: 1.5rem; }
 .report-header h3 { font-size: 1.5rem; margin: 0 0 0.25rem 0; color: #111827; }
 .report-header p { margin: 0; color: #6b7280; }
+.fy-select {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  background-color: white;
+}
 
 .report-summary {
   display: flex;
