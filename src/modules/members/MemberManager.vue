@@ -9,6 +9,7 @@ const logType = logsStore.logType
 const search = ref('')
 const selectedType = ref('')
 const unpaidDuesOnly = ref(false)
+const showInactive = ref(false)
 const minHours = ref('')
 const maxHours = ref('')
 const copiedEmail = ref(null)
@@ -150,8 +151,12 @@ const filteredMembers = computed(() => {
     
     if (selectedType.value) {
         list = list.filter(m => m.MembershipType === selectedType.value)
+    } else if (!showInactive.value) {
+        // Inactive members (moved away, deceased, etc.) are kept for historical records but
+        // hidden from the default view. Picking "Inactive" from the type filter still shows them.
+        list = list.filter(m => (m.MembershipType || '').toLowerCase() !== 'inactive')
     }
-    
+
     if (search.value) {
         const q = search.value.toLowerCase()
         list = list.filter(m =>
@@ -326,6 +331,10 @@ const copyEmail = async (email) => {
                     <label class="dues-filter">
                         <input type="checkbox" v-model="unpaidDuesOnly">
                         2026 Dues Unpaid Only
+                    </label>
+                    <label class="dues-filter">
+                        <input type="checkbox" v-model="showInactive">
+                        Show Inactive
                     </label>
                     <button @click="$router.push('/members/add')" class="btn-add">
                         <span>+</span> Add Member

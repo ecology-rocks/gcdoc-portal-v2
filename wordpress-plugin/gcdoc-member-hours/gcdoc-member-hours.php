@@ -196,8 +196,9 @@ function gcdoc_member_hours_shortcode() {
     $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
 
     // Voted in after July 1 -> no dues owed for the cycle that starts the following Oct 1,
-    // regardless of membership type or hours. Only kicks in when a VotedInDate is on file.
-    $voted_in_exempt = !empty($report['duesExemptVotedIn']);
+    // regardless of hours. Only kicks in when a VotedInDate is on file, and only for membership
+    // types that have a dues schedule to begin with (Inactive/Nonmember/unknown stay hidden).
+    $voted_in_exempt = $dues !== null && !empty($report['duesExemptVotedIn']);
     if ($voted_in_exempt) {
         $dues = ['amount' => 0, 'eligible' => true, 'note' => ''];
     }
