@@ -16,6 +16,7 @@ if (!defined('ABSPATH')) {
 // define('GCDOC_REPORT_SECRET', 'a-long-random-shared-secret');
 
 define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/2026-dues');
+define('GCDOC_DUES_PRODUCT_URL', 'https://gcdoc.com/product/membership-dues/');
 define('GCDOC_HOURS_ENTRY_URL', 'https://gcdoc.com/member-hours-entry/');
 define('GCDOC_LOGIN_URL', 'https://gcdoc.com/membership-login');
 
@@ -121,6 +122,29 @@ function gcdoc_calculate_dues($membership_type, $hours) {
 
     // Unknown/inactive/nonmember types have no dues schedule to show.
     return null;
+}
+
+// Deep link to the dues product with the matching variation preselected. The option labels must
+// match the WooCommerce variation values exactly. Ineligible members (< 20 hrs) are pointed at Associate.
+function gcdoc_dues_pay_url($dues) {
+    if ($dues === null) {
+        return GCDOC_DUES_PAGE_URL;
+    }
+
+    $labels = [
+        50 => '$50',
+        40 => '$40',
+        30 => '$30',
+        15 => '$15',
+        20 => 'Associate ($20)',
+        0 => '$0 (Lifetime/Applicant)',
+    ];
+    $amount = $dues['eligible'] ? $dues['amount'] : 20;
+    if (!isset($labels[$amount])) {
+        return GCDOC_DUES_PRODUCT_URL;
+    }
+
+    return GCDOC_DUES_PRODUCT_URL . '?attribute_how-much-do-you-owe-plus-paypal-fees=' . urlencode($labels[$amount]);
 }
 
 // Shared by any shortcode that needs the current user's report (hours, dues owed, etc.)
@@ -237,7 +261,7 @@ function gcdoc_member_hours_shortcode() {
                 <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
                 <?php if (empty($report['dues2026Paid'])) : ?>
                     <p class="gcdoc-dues-pay">
-                        <a href="<?php echo esc_url(GCDOC_DUES_PAGE_URL); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
+                        <a href="<?php echo esc_url(gcdoc_dues_pay_url($dues)); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
                         <a href="<?php echo esc_url(GCDOC_HOURS_ENTRY_URL); ?>" class="gcdoc-enter-hours-btn">Enter Missing Hours</a>
                     </p>
                 <?php endif; ?>
@@ -392,6 +416,11 @@ function gcdoc_member_directory_shortcode() {
                                 <span class="gcdoc-member-phone"><?php echo esc_html($m['phone']); ?></span>
                             <?php endif; ?>
                             <a href="mailto:<?php echo esc_attr($m['email']); ?>"><?php echo esc_html($m['email']); ?></a>
+                            <?php if (!empty($m['address'])) : ?>
+                                <span class="gcdoc-member-address"><?php echo esc_html($m['address']); ?>, <?php echo esc_html($m['city']); ?>, <?php echo esc_html($m['state']); ?> <?php echo esc_html($m['zip']); ?></span>
+                            <?php endif; ?>
+                            <br />
+
                         </div>
                     </div>
                 <?php endforeach; ?>

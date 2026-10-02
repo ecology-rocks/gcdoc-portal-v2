@@ -40,6 +40,10 @@ export async function handler(event) {
           familyName: [data.FirstName2, data.LastName2].filter(Boolean).join(' '),
           email: data.Email || '',
           phone: data.Phone1 || '',
+          address: data.Address || '',
+          city: data.City || '',
+          state: data.State || '',
+          zip: data.Zip || '',
           membershipType: data.MembershipType || '',
           joined: data.Joined || ''
         }
