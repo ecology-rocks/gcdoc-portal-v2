@@ -17,6 +17,9 @@ if (!defined('ABSPATH')) {
 
 define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/2026-dues');
 define('GCDOC_DUES_PRODUCT_URL', 'https://gcdoc.com/product/membership-dues/');
+define('GCDOC_DUES_PRODUCT_SLUG', 'membership-dues');
+// sanitize_title() of the dues product's variation attribute name.
+define('GCDOC_DUES_ATTRIBUTE', 'how-much-do-you-owe-plus-paypal-fees');
 define('GCDOC_HOURS_ENTRY_URL', 'https://gcdoc.com/member-hours-entry/');
 define('GCDOC_LOGIN_URL', 'https://gcdoc.com/membership-login');
 
@@ -100,12 +103,12 @@ function gcdoc_calculate_dues($membership_type, $hours) {
         return ['amount' => 20, 'eligible' => true, 'note' => ''];
     }
 
-    if (in_array($type, ['regular', 'household'], true)) {
+    if (in_array($type, ['regular', 'family', 'household'], true)) {
         if ($hours < 20) {
             return [
                 'amount' => null,
                 'eligible' => false,
-                'note' => 'You have not logged enough hours for Regular/Household membership dues. Please select the $20 Associate Membership option instead, or contact the membership chair at <a href="mailto:membership@gcdoc.com">membership@gcdoc.com</a> with questions.',
+                'note' => 'You have not logged enough hours for Regular/Family membership dues. Please select the $20 Associate Membership option instead, or contact the membership chair at <a href="mailto:membership@gcdoc.com">membership@gcdoc.com</a> with questions.',
             ];
         }
         if ($hours < 30) {
@@ -124,11 +127,20 @@ function gcdoc_calculate_dues($membership_type, $hours) {
     return null;
 }
 
-// Deep link to the dues product with the matching variation preselected. The option labels must
-// match the WooCommerce variation values exactly. Ineligible members (< 20 hrs) are pointed at Associate.
-function gcdoc_dues_pay_url($dues) {
+// Applies the "voted in after July 1" exemption on top of the hours-based schedule.
+function gcdoc_member_dues_from_report($report) {
+    $dues = gcdoc_calculate_dues($report['membershipType'] ?? '', $report['duesFiscalYearHours'] ?? 0);
+    if ($dues !== null && !empty($report['duesExemptVotedIn'])) {
+        $dues = ['amount' => 0, 'eligible' => true, 'note' => ''];
+    }
+    return $dues;
+}
+
+// The WooCommerce variation option label for a dues result. The option labels must match the
+// WooCommerce variation values exactly. Ineligible members (< 20 hrs) are pointed at Associate.
+function gcdoc_dues_option_label($dues) {
     if ($dues === null) {
-        return GCDOC_DUES_PAGE_URL;
+        return null;
     }
 
     $labels = [
@@ -140,12 +152,57 @@ function gcdoc_dues_pay_url($dues) {
         0 => '$0 (Lifetime/Applicant)',
     ];
     $amount = $dues['eligible'] ? $dues['amount'] : 20;
-    if (!isset($labels[$amount])) {
+    return $labels[$amount] ?? null;
+}
+
+// Deep link to the dues product with the matching variation preselected.
+function gcdoc_dues_pay_url($dues) {
+    if ($dues === null) {
+        return GCDOC_DUES_PAGE_URL;
+    }
+
+    $label = gcdoc_dues_option_label($dues);
+    if ($label === null) {
         return GCDOC_DUES_PRODUCT_URL;
     }
 
-    return GCDOC_DUES_PRODUCT_URL . '?attribute_how-much-do-you-owe-plus-paypal-fees=' . urlencode($labels[$amount]);
+    return GCDOC_DUES_PRODUCT_URL . '?attribute_' . GCDOC_DUES_ATTRIBUTE . '=' . urlencode($label);
 }
+
+// Preselect the logged-in member's dues option in the dues product's dropdown, wherever the product
+// form is rendered (the product page or the static dues page). Runs server-side as WooCommerce builds
+// the <select>, so the page loads with the right price already showing - no refresh, no JS.
+function gcdoc_preselect_dues_option($args) {
+    if (sanitize_title($args['attribute'] ?? '') !== GCDOC_DUES_ATTRIBUTE || !is_user_logged_in()) {
+        return $args;
+    }
+    // An explicit choice in the URL (e.g. the "Pay Your Dues" deep link) wins.
+    if (isset($_REQUEST['attribute_' . GCDOC_DUES_ATTRIBUTE])) {
+        return $args;
+    }
+
+    $report = gcdoc_get_member_report_cached();
+    if (is_wp_error($report) || !empty($report['dues2026Paid'])) {
+        return $args;
+    }
+
+    $label = gcdoc_dues_option_label(gcdoc_member_dues_from_report($report));
+    // Only preselect if the label actually exists on the product, so a renamed variation fails safe.
+    if ($label !== null && in_array($label, (array) ($args['options'] ?? []), true)) {
+        $args['selected'] = $label;
+    }
+    return $args;
+}
+add_filter('woocommerce_dropdown_variation_attribute_options_args', 'gcdoc_preselect_dues_option');
+
+// Adding the dues product to the cart goes straight to checkout instead of the cart page.
+function gcdoc_dues_skip_cart($url, $product = null) {
+    if ($product instanceof WC_Product && $product->get_slug() === GCDOC_DUES_PRODUCT_SLUG) {
+        return wc_get_checkout_url();
+    }
+    return $url;
+}
+add_filter('woocommerce_add_to_cart_redirect', 'gcdoc_dues_skip_cart', 10, 2);
 
 // Shared by any shortcode that needs the current user's report (hours, dues owed, etc.)
 function gcdoc_get_member_report_cached() {
@@ -186,11 +243,11 @@ function gcdoc_render_dues_table($membership_type, $hours) {
     ?>
     <table class="gcdoc-dues-table">
         <thead>
-            <tr><th>Hours Logged (Regular/Household)</th><th>Dues</th></tr>
+            <tr><th>Hours Logged (Regular/Family)</th><th>Dues</th></tr>
         </thead>
         <tbody>
             <?php foreach ($rows as $row) : ?>
-                <?php $is_current = strtolower(trim($membership_type)) === 'regular' || strtolower(trim($membership_type)) === 'household'; ?>
+                <?php $is_current = strtolower(trim($membership_type)) === 'regular' || in_array(strtolower(trim($membership_type)), ['family', 'household'], true); ?>
                 <?php $is_current = $is_current && $hours >= $row['min'] && $hours < $row['max']; ?>
                 <tr class="<?php echo $is_current ? 'gcdoc-dues-current' : ''; ?>">
                     <td><?php echo esc_html($row['range']); ?></td>
@@ -314,7 +371,7 @@ function gcdoc_member_hours_shortcode() {
 }
 add_shortcode('gcdoc_hours', 'gcdoc_member_hours_shortcode');
 
-// A short bolded line for the dues product page itself: "Your dues owed are $X..."
+// Dues box for the dues page: amount owed plus numbered steps for paying it.
 function gcdoc_dues_owed_shortcode() {
     $report = gcdoc_get_member_report_cached();
     if (is_wp_error($report)) {
@@ -324,32 +381,37 @@ function gcdoc_dues_owed_shortcode() {
         return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">Unable to load your dues amount right now. Please try again later.</p>';
     }
 
-    $membership_type = $report['membershipType'] ?? '';
-    $current_fy_hours = $report['duesFiscalYearHours'] ?? 0;
-    $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
+    $dues = gcdoc_member_dues_from_report($report);
 
     if ($dues === null) {
         return '';
-    }
-
-    $voted_in_exempt = !empty($report['duesExemptVotedIn']);
-    if ($voted_in_exempt) {
-        $dues = ['amount' => 0, 'eligible' => true, 'note' => ''];
     }
 
     if (!empty($report['dues2026Paid'])) {
         return '<p class="gcdoc-dues-owed gcdoc-dues-owed-paid">✓ Your 2026 dues are paid. Thank you!</p>';
     }
 
-    if ($voted_in_exempt) {
-        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">You were voted in on ' . esc_html($report['votedInDate']) . ' (after July 1), so no dues are owed for this cycle. Please select the correct option on the form below.</p>';
+    if (!empty($report['duesExemptVotedIn'])) {
+        $intro = 'You were voted in on ' . esc_html($report['votedInDate']) . ' (after July 1), so no dues are owed for this cycle.';
+    } elseif (!$dues['eligible']) {
+        $intro = wp_kses_post($dues['note']);
+    } else {
+        $intro = 'Your dues are $' . esc_html($dues['amount']) . '.';
     }
 
-    if (!$dues['eligible']) {
-        return '<p class="gcdoc-dues-owed gcdoc-dues-owed-ineligible">' . wp_kses_post($dues['note']) . '</p>';
-    }
+    // gcdoc_preselect_dues_option() picks this same option in the product form below.
+    $label = gcdoc_dues_option_label($dues);
+    $state_class = $dues['eligible'] ? 'gcdoc-dues-owed-unpaid' : 'gcdoc-dues-owed-ineligible';
 
-    return '<p class="gcdoc-dues-owed gcdoc-dues-owed-unpaid">Your dues owed are $' . esc_html($dues['amount']) . '. Please select the correct option on the form below.</p>';
+    return '<div class="gcdoc-dues-owed ' . $state_class . '">'
+        . '<p>' . $intro . '</p>'
+        . '<ol class="gcdoc-dues-steps">'
+        . '<li>We already picked <strong>' . esc_html($label) . '</strong> for you in the form below.</li>'
+        . '<li>Type your legal name in the <strong>Your Name</strong> box to sign the waiver.</li>'
+        . '<li>Click <strong>Add to cart</strong>. </li>'
+        . '<li>Use the "Proceed to PayPal" button on the next page to begin the checkout process.</li>'
+        . '</ol>'
+        . '</div>';
 }
 add_shortcode('gcdoc_dues_owed', 'gcdoc_dues_owed_shortcode');
 
@@ -594,6 +656,9 @@ function gcdoc_hours_styles() {
         .gcdoc-dues-owed-paid { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
         .gcdoc-dues-owed-ineligible { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
         .gcdoc-dues-owed-ineligible a { color: #b91c1c; text-decoration: underline; }
+        .gcdoc-dues-owed p { margin: 0; }
+        .gcdoc-dues-steps { margin: 0.6rem 0 0 1.4rem; padding: 0; font-size: 1.05rem; font-weight: 400; }
+        .gcdoc-dues-steps li { margin-bottom: 0.3rem; }
         .gcdoc-login-prompt { font-weight: 600; }
         .gcdoc-login-prompt a { color: #2563eb; text-decoration: underline; }
         .gcdoc-directory-search { width: 100%; max-width: 320px; padding: 0.4rem 0.6rem; margin-bottom: 0.75rem; border: 1px solid #d1d5db; border-radius: 4px; }
