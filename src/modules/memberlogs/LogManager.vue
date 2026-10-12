@@ -44,13 +44,16 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import LogHistory from './components/LogHistory.vue'
 import SingleEntryForm from './components/SingleEntryForm.vue'
 import SheetManager from './components/SheetManager.vue'
 import LogApprovals from './components/LogApprovals.vue'
 import { useLogsStore } from '@/stores/logsStore'
 
-const viewMode = ref('list')
+// ?tab=sheets (etc.) opens a specific tab, e.g. from the dashboard after uploading a sheet
+const route = useRoute()
+const viewMode = ref(['list', 'approvals', 'single', 'sheets'].includes(route.query.tab) ? route.query.tab : 'list')
 const logsStore = useLogsStore()
 const pendingCount = computed(() => logsStore.pendingLogs.length)
 </script>

@@ -1,12 +1,15 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 
 const store = useMembersStore()
 const logsStore = useLogsStore()
 const logType = logsStore.logType
-const search = ref('')
+// ?q= prefills the search, e.g. from the dashboard's member lookup
+const route = useRoute()
+const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const selectedType = ref('')
 const unpaidDuesOnly = ref(false)
 const showInactive = ref(false)

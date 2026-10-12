@@ -111,27 +111,10 @@ export const useLogsStore = defineStore("logs", {
     },
 
     // 2. Fiscal Year Total (Oct 1 - Sept 30)
-    fiscalYearHours: (state) => {
-      const hoursMap = {};
-      const now = new Date();
-      const currentMonth = now.getMonth(); // 0 = Jan, 9 = Oct
-      const currentYear = now.getFullYear();
+    fiscalYearHours: (state) => hoursByMemberForFiscalYear(state.logs, 0),
 
-      const startYear = currentMonth >= 9 ? currentYear : currentYear - 1;
-      const startDate = new Date(startYear, 9, 1);
-      const endDate = new Date(startYear + 1, 9, 1);
-
-      state.logs.forEach((log) => {
-        const d = log.Date?.toDate ? log.Date.toDate() : new Date(log.Date);
-        if (d >= startDate && d < endDate) {
-          const email = log.MemberEmail || "unknown";
-          const hrs = Number(log.Hours) || 0;
-          if (!hoursMap[email]) hoursMap[email] = 0;
-          hoursMap[email] += hrs;
-        }
-      });
-      return hoursMap;
-    },
+    // 2b. Previous Fiscal Year Total
+    lastFiscalYearHours: (state) => hoursByMemberForFiscalYear(state.logs, 1),
 
     // 3. Service Vouchers (<50 = 0, >=50 = 1 per 25)
     vouchersByMember: (state) => {
