@@ -6,14 +6,21 @@
         <h1>Meeting Prep</h1>
         <p class="subtitle">Overview for {{ new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) }} General Meeting</p>
         <div class="header-actions">
-          <button class="btn-primary" @click="$router.push({ name: 'attendance' })">
-            📄 View Attendance Sheet
+          <button class="btn-primary" @click="$router.push({ name: 'meeting-print', params: { kind: 'hours' } })">
+            📄 Hours Report
+          </button>
+          <button class="btn-primary" @click="$router.push({ name: 'meeting-print', params: { kind: 'year' } })">
+            🗓️ Year Attendance
+          </button>
+          <button class="btn-primary" @click="$router.push({ name: 'meeting-print', params: { kind: 'applicants' } })">
+            📋 Applicants
           </button>
         </div>
       </div>
       <div class="header-right">
-        <div class="big-number highlight">{{ membersStore.votingMembers.length }}</div>
-        <div class="label">Voting Members</div>
+        <div class="big-number highlight">{{ membersStore.eligibleVoters.length }}</div>
+        <div class="label">Eligible Voters</div>
+        <div class="label">of {{ membersStore.votingMembers.length }} members (dues paid or Lifetime)</div>
       </div>
     </div>
 
@@ -22,7 +29,7 @@
       <div class="stat-card border-indigo">
         <h3>Quorum Required (20%)</h3>
         <div class="stat-value">
-          <span class="number">{{ quorum }}</span>
+          <span class="number">{{ membersStore.quorum }}</span>
           <span class="unit">members present</span>
         </div>
       </div>
@@ -135,11 +142,6 @@ onMounted(async () => {
   loadingLogs.value = true
   await logsStore.initLogs()
   loadingLogs.value = false
-})
-
-// Quorum
-const quorum = computed(() => {
-  return Math.ceil(membersStore.votingMembers.length * 0.2)
 })
 
 // --- DATE LOGIC ---
@@ -533,6 +535,9 @@ const totalActualHoursFY = computed(() => {
 /* [NEW STYLES] */
 .header-actions {
   margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .btn-primary {

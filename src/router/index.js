@@ -9,7 +9,7 @@ import MemberForm from '@/modules/members/MemberForm.vue'
 import MemberManager from '@/modules/members/MemberManager.vue' 
 import MeetingView from '@/modules/admin/MeetingView.vue'
 import KioskView from '@/views/KioskView.vue'
-import AttendanceSheet from '@/modules/admin/AttendanceSheet.vue'
+import MeetingPrintable from '@/modules/admin/MeetingPrintable.vue'
 import Dashboard from '@/modules/dashboard/Dashboard.vue'
 
 const router = createRouter({
@@ -36,7 +36,7 @@ const router = createRouter({
         { path: 'logs', name: 'logs', component: LogManager, meta: { role: 'admin' } },
         { path: 'meeting', name: 'meeting', component: MeetingView, meta: { role: 'admin' } },
         { path: 'import', name: 'import', component: CsvImporter, meta: { role: 'admin' } },
-        { path: 'meeting/attendance', name: 'attendance', component: AttendanceSheet, meta: { role: 'admin' } },
+        { path: 'meeting/print/:kind?', name: 'meeting-print', component: MeetingPrintable, meta: { role: 'admin' } },
         // Members
         {
           path: 'members',       
