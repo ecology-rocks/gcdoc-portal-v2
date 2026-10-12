@@ -198,7 +198,7 @@ const form = ref({
   // the member doesn't actually have on file
   Joined: route.params.id ? '' : new Date().getFullYear(), VotedInDate: '', Breeds: '',
   ApplicantClass1: false, ApplicantClass2: false, ApplicantWelcomeEmailSent: false, ApplicantFeePaid: false,
-  ApplicantWaiverSigned: false
+  ApplicantWaiverSigned: false, ApplicantAccountMade: false
 })
 
 const applicantChecklist = APPLICANT_CHECKLIST

@@ -15,7 +15,8 @@ export const APPLICANT_CHECKLIST = [
   { field: 'ApplicantClass2', label: 'Class 2', short: 'Class 2' },
   { field: 'ApplicantWelcomeEmailSent', label: 'Welcome Email Sent', short: 'Welcome Email' },
   { field: 'ApplicantFeePaid', label: 'Paid Fee', short: 'Fee' },
-  { field: 'ApplicantWaiverSigned', label: 'Waiver Signed', short: 'Waiver' }
+  { field: 'ApplicantWaiverSigned', label: 'Waiver Signed', short: 'Waiver' },
+  { field: 'ApplicantAccountMade', label: 'Account Made', short: 'Account' }
 ]
 
 // Members can't vote until their dues are paid; Lifetime members always can

@@ -338,7 +338,7 @@ const printSheet = () => window.print()
 .applicant-table th { font-size: 8pt; vertical-align: bottom; }
 .applicant-table .col-date { width: 10%; }
 .applicant-table .col-num { width: 7%; }
-.col-check { width: 7%; text-align: center !important; }
+.col-check { width: 6%; text-align: center !important; }
 .cell-check { font-weight: bold; font-size: 1.1em; }
 
 .family-line { font-size: 0.85em; color: #333; padding-left: 0.75rem; }
