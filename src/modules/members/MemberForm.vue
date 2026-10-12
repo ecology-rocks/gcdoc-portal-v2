@@ -112,19 +112,17 @@
             <select v-model="form.MembershipType">
                <option value="Regular">Regular</option>
                <option value="Lifetime">Lifetime</option>
-               <option value="Household">Household</option>
+               <option value="Family">Family</option>
                <option value="Associate">Associate</option>
                <option value="Applicant">Applicant</option>
                <option value="Inactive">Inactive</option>
                <option value="Nonmember">Nonmember</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Role (Permissions)</label>
-            <select v-model="form.Role">
-              <option value="member">Member</option>
-              <option value="admin">Admin</option>
-            </select>
+          <div v-if="statusChanged" class="form-group">
+            <label>Reason for type change (optional)</label>
+            <input v-model="statusNote" type="text" placeholder="e.g. Voted in at Oct meeting">
+            <p class="help-text">Saved to this member's History.</p>
           </div>
           <div class="form-group">
             <label>Joined Year</label>
@@ -142,6 +140,17 @@
         </div>
       </div>
 
+      <!-- Only while they're an applicant; values stay on the record after they're voted in -->
+      <div v-if="form.MembershipType === 'Applicant'" class="form-section">
+        <h3>Applicant Checklist</h3>
+        <div class="checklist">
+          <label v-for="item in applicantChecklist" :key="item.field" class="check-item">
+            <input v-model="form[item.field]" type="checkbox">
+            <span>{{ item.label }}</span>
+          </label>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button type="button" @click="$router.back()" class="btn-cancel">Cancel</button>
         <button 
@@ -155,9 +164,9 @@
 
     </form>
 
-    <DogManager 
-      v-if="isEditMode" 
-      :owner-email="form.Email" 
+    <MemberChangelog
+      v-if="isEditMode && !fetching"
+      :member-email="route.params.id"
     />
 
   </div>
@@ -166,8 +175,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useMembersStore } from '@/stores/membersStore'
-import DogManager from './components/DogManager.vue'
+import { useMembersStore, APPLICANT_CHECKLIST } from '@/stores/membersStore'
+import MemberChangelog from './components/MemberChangelog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -184,9 +193,20 @@ const form = ref({
   Phone2: '', PhoneType2: 'Home',
   Phone3: '', PhoneType3: 'Work',
   Address: '', City: '', State: 'OH', Zip: '',
-  MembershipType: 'Applicant', Role: 'member',
-  Joined: new Date().getFullYear(), VotedInDate: '', Breeds: ''
+  MembershipType: 'Applicant',
+  // Only new members default to this year - an edit must never show (and then save) a year
+  // the member doesn't actually have on file
+  Joined: route.params.id ? '' : new Date().getFullYear(), VotedInDate: '', Breeds: '',
+  ApplicantClass1: false, ApplicantClass2: false, ApplicantWelcomeEmailSent: false, ApplicantFeePaid: false,
+  ApplicantWaiverSigned: false
 })
+
+const applicantChecklist = APPLICANT_CHECKLIST
+
+// Type as loaded, so we can ask for a reason only when it's actually being changed
+const originalType = ref('')
+const statusNote = ref('')
+const statusChanged = computed(() => isEditMode.value && form.value.MembershipType !== originalType.value)
 
 onMounted(async () => {
   if (isEditMode.value) {
@@ -196,6 +216,10 @@ onMounted(async () => {
     const member = store.getMemberByEmail(route.params.id)
     if (member) {
       form.value = { ...form.value, ...member }
+      originalType.value = member.MembershipType || ''
+      form.value.Joined = member.Joined ?? ''
+      // "Household" was renamed to "Family" - upgrade it on save so the dropdown isn't blank
+      if (form.value.MembershipType === 'Household') form.value.MembershipType = 'Family'
     } else {
       alert('Member not found')
       router.push('/members')
@@ -208,7 +232,7 @@ const handleSubmit = async () => {
   submitting.value = true
   try {
     if (isEditMode.value) {
-      await store.updateMember(route.params.id, form.value)
+      await store.updateMember(route.params.id, form.value, { statusNote: statusNote.value })
       alert('Member updated successfully')
     } else {
       await store.addMember(form.value)
@@ -318,6 +342,25 @@ const handleSubmit = async () => {
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
 }
+
+.checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.check-item input { width: 1.1rem; height: 1.1rem; cursor: pointer; }
 
 .select-sm {
   margin-top: 0.25rem;

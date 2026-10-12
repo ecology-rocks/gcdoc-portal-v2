@@ -7,7 +7,7 @@ Roadmap ordered by dependency (each phase simplifies the next), not by original 
 ## Completed
 
 ### Phase 1 — Sunset unused features ✅
-Classes/Registration module fully removed (`classStore.js`, `ClassDashboard.vue`, `RegistrarView.vue`, dead nav links). `DogManager.vue`/`DogModal.vue` confirmed as a general member-dogs feature, kept. Member portal accounts sunset — only admin (`reallyjustsam@gmail.com`) and the `kiosk@gcdoc.com` terminal have accounts now; email-link sign-in and registrar/teacher roles removed from `authStore.js` and `Login.vue`.
+Classes/Registration module fully removed (`classStore.js`, `ClassDashboard.vue`, `RegistrarView.vue`, dead nav links). Member-dogs feature (`DogManager.vue`, `DogModal.vue`, `dogStore.js`, Dogs import/export tab) also sunset and removed 2026-10-12; existing `dogs` Firestore docs and rule left in place, unused. Member portal accounts sunset — only admin (`reallyjustsam@gmail.com`) and the `kiosk@gcdoc.com` terminal have accounts now; email-link sign-in and registrar/teacher roles removed from `authStore.js` and `Login.vue`.
 
 ### Phase 2 — Hours tracker in the WordPress plugin ✅
 `netlify/functions/member-log-submit.js` + `[gcdoc_log_hours]` shortcode let members self-log hours from WordPress, landing in the existing approval queue with `SourceSheet: "wp-plugin"`.
@@ -19,7 +19,7 @@ Went further than originally scoped — this one's essentially done, not just st
 - `VotedInDate` field + automatic dues exemption (voted in after July 1 → no dues owed for the cycle starting the following Oct 1), computed in `member-report.js`, only applies when a date is actually on file
 - **Still open**: `gcdoc_calculate_dues()` only exists in PHP (`gcdoc-member-hours.php`) — never got ported to a shared JS util, so the portal has no way to independently compute/display a dues amount itself. Low priority since nothing in the portal needs that today, but flagged here so it doesn't get lost.
 
-## Phase 3 — Member changelog + log compression (design settled, not yet built)
+## Phase 3 — Member changelog + log compression (changelog built; compression not yet built)
 
 Current state is a band-aid, not a real data model. `MembershipType` is a single mutable string field on the member doc (`Active`/`Inactive`/etc. — no history of *when* someone went inactive or why), so the portal can only ever show "current status," never "was this person an active member in FY2023?" The Members view now hides `Inactive` by default via a UI filter (`src/modules/members/MemberManager.vue`), which solves today's clutter problem but doesn't solve historical reporting. Separately, `src/stores/logsStore.js` pulls the *entire* `logs` collection into memory via a live listener for every admin session — fine today, but unbounded growth over years is a real future cost/performance problem.
 
@@ -47,7 +47,15 @@ The changelog is pure history — it never overrides "current." Every existing p
 - Everything else in that folder (dues-deposit batches, meeting-count sheet, applicant cleanup sheet, 2014 directory docs) was judged not worth importing for this phase — name-only matching risk or off-topic.
 - Not yet imported anywhere — this is just a scouted inventory for when the changelog system is actually built.
 
-- Not yet built: the changelog subcollection, the write-alongside-existing-updates wiring, and the FY close-out/export/delete admin action
+**Changelog built (2026-10-12)** — the history half of this phase is done; log compression is not:
+- `members/{email}/changelog/{id}` subcollection, append-only. Helpers + event types documented at the top of `src/stores/membersStore.js`. Each entry has `date`, `type`, `by` (admin email) plus type fields.
+- Event types shipped: `status_change {from, to, note}`, `dues_payment {duesYear}`, `dues_payment_reversed {duesYear}`, `email_change {from, to}`, `applicant_step {field, label, done}` (applicant checklist boxes, list in `APPLICANT_CHECKLIST`), `note {text}`. Dues entries record paid/unpaid only — no dollar amount, since dues calc still lives only in PHP (see Phase 4 "still open").
+- Written in the same batch as the member update in: `addMember`, `updateMember` (only when `MembershipType` actually changes; optional "Reason for type change" field on the edit form), `setDuesPaid`, `importGenericRows` (new members + type changes), `transferMemberEmail` (moves the whole changelog to the new email, then logs the change).
+- UI: "History" panel on the Edit Member page (`src/modules/members/components/MemberChangelog.vue`) with manual "Add Note".
+- Firestore rule `members/{memberId}/changelog/{entryId}`: read/create/delete for admin, no update. Lives in `firestore.local` (gitignored) — must be published to Firebase.
+- `fy_summary` / `dues_exempt` types are designed but not emitted yet — they belong with the close-out action.
+
+- Not yet built: the FY close-out/export/delete admin action (would emit `fy_summary`), and the one-time FY2025 seed from `2025 End of year PDF.pdf`
 - Worth doing before Phase 4 (Attendance) and Phase 5 (Vouchers) if possible, since both would naturally emit their own changelog event types (attendance eligibility determinations, voucher issuance/redemption) rather than inventing separate history mechanisms
 
 ## Phase 4 — Attendance tracking for board eligibility

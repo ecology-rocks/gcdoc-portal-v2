@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { useMembersStore } from '@/stores/membersStore'
+import { useMembersStore, APPLICANT_CHECKLIST } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 
 const store = useMembersStore()
@@ -213,6 +213,22 @@ const toggleDuesPaid = async (member) => {
   }
 }
 
+// Saves immediately; the live member listener updates the checkbox afterward
+const savingStep = ref(null)
+const toggleApplicantStep = async (member, field, event) => {
+  const done = event.target.checked
+  savingStep.value = member.Email + field
+  try {
+    await store.setApplicantStep(member.Email, field, done)
+  } catch (err) {
+    console.error('Failed to update applicant step', err)
+    event.target.checked = !done
+    alert('Failed to update applicant checklist.')
+  } finally {
+    savingStep.value = null
+  }
+}
+
 // --- Add Missing Hours ---
 const openAddHours = (member) => {
   addHoursTarget.value = member
@@ -389,6 +405,17 @@ const copyEmail = async (email) => {
                     >
                         2026 Dues: {{ m.Dues2026Paid ? 'Paid' : 'Not Paid' }}
                     </button>
+                    <div v-if="m.MembershipType === 'Applicant'" class="applicant-steps">
+                        <label v-for="item in APPLICANT_CHECKLIST" :key="item.field" class="step-check">
+                            <input
+                                type="checkbox"
+                                :checked="!!m[item.field]"
+                                :disabled="savingStep === m.Email + item.field"
+                                @change="toggleApplicantStep(m, item.field, $event)"
+                            >
+                            <span>{{ item.label }}</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="card-footer">
@@ -695,6 +722,26 @@ const copyEmail = async (email) => {
   font-size: 0.875rem;
   box-sizing: border-box;
 }
+
+.applicant-steps {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e5e7eb;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.3rem 0.75rem;
+}
+
+.step-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.step-check input { cursor: pointer; }
 
 .dues-badge {
   margin-top: 0.5rem;

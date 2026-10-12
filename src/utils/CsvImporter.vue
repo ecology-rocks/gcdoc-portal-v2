@@ -75,9 +75,8 @@
         
         <div class="format-help">
           <p class="help-label">Expected Columns:</p>
-          <div v-if="activeTab === 'members'">Email, FirstName, LastName, Role, Phone1, Address...</div>
+          <div v-if="activeTab === 'members'">Email, FirstName, LastName, MembershipType, Phone1, Address...</div>
           <div v-if="activeTab === 'logs'">MemberEmail, Date, Hours, Activity, isMaintenance...</div>
-          <div v-if="activeTab === 'dogs'">Name, OwnerEmail, Breed, Sex (M/F), Birthdate (YYYY-MM-DD), Neutered (Yes/No)</div>
         </div>
 
         <input 
@@ -106,8 +105,12 @@
         <p class="card-desc">
           Download a full CSV of all {{ activeTab }} currently in the database.
         </p>
-        <button 
-          @click="processExport" 
+        <label v-if="activeTab === 'members'" class="export-option">
+          <input type="checkbox" v-model="excludeInactive">
+          Hide Inactive members
+        </label>
+        <button
+          @click="processExport"
           :disabled="uploading"
           class="btn-export"
         >
@@ -130,9 +133,8 @@ import { ref, watch } from 'vue'
 import Papa from 'papaparse'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
-import { useDogStore } from '@/stores/dogStore'
 
-const tabs = ['members', 'logs', 'dogs']
+const tabs = ['members', 'logs']
 const activeTab = ref('members')
 const parsing = ref(false)
 const uploading = ref(false)
@@ -142,11 +144,11 @@ const emailTransferOld = ref('')
 const emailTransferNew = ref('')
 const emailTransferResult = ref(null)
 const transferring = ref(false)
+const excludeInactive = ref(true)
 
 const stores = {
   members: useMembersStore(),
-  logs: useLogsStore(),
-  dogs: useDogStore()
+  logs: useLogsStore()
 }
 
 watch(activeTab, () => {
@@ -216,7 +218,8 @@ const runCleaner = async () => {
 const processImport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]
-  const chunkSize = 400 
+  // Member rows can also write a changelog entry each, so keep batches under Firestore's 500-op limit
+  const chunkSize = 200
   const chunks = []
   for (let i = 0; i < parsedData.value.length; i += chunkSize) {
     chunks.push(parsedData.value.slice(i, i + chunkSize))
@@ -241,7 +244,7 @@ const processExport = async () => {
   uploading.value = true
   const currentStore = stores[activeTab.value]
   try {
-    const data = await currentStore.getExportData()
+    const data = await currentStore.getExportData({ excludeInactive: excludeInactive.value })
     if (!data || data.length === 0) {
       alert("No data to export.")
       uploading.value = false
@@ -373,6 +376,15 @@ const processExport = async () => {
 .btn-import:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .card-desc { font-size: 0.875rem; color: #6b7280; margin-bottom: 1.5rem; }
+
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
 
 .btn-export {
   width: 100%;
