@@ -39,14 +39,15 @@
           <span class="label">Dashboard</span>
         </RouterLink>
 
-        <div v-if="authStore.isAdmin" class="nav-divider">Admin Tools</div>
-
         <template v-if="authStore.isAdmin">
-          <RouterLink to="/meeting" class="nav-item" active-class="active" @click="closeSidebar">
-            <span class="icon">📅</span> Meeting Prep
+          <RouterLink to="/import" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">🔄</span> Data Import/Export
           </RouterLink>
           <RouterLink to="/logs" class="nav-item" active-class="active" @click="closeSidebar">
-            <span class="icon">📝</span> Logs & Sheets
+            <span class="icon">📝</span> Logs
+          </RouterLink>
+          <RouterLink to="/meeting" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">📅</span> Meeting Prep
           </RouterLink>
           <RouterLink to="/members" class="nav-item" active-class="active" @click="closeSidebar">
             <span class="icon">👥</span> Members
@@ -56,9 +57,6 @@
 
       <div class="sidebar-footer">
         <RouterLink to="/kiosk" class="footer-link">✍🏻 Go To Kiosk</RouterLink>
-        <RouterLink v-if="authStore.isAdmin" to="/import" class="footer-link warning" @click="closeSidebar">
-          ⚠️ Data Importer
-        </RouterLink>
         <button @click="handleLogout" class="footer-link">
           🚪 Sign Out
         </button>
@@ -99,11 +97,7 @@ const displayLastName = computed(() => {
 })
 
 const displayRole = computed(() => {
-  if (resolvedProfile.value?.Role) return resolvedProfile.value.Role
-  if (Array.isArray(resolvedProfile.value?.roles) && resolvedProfile.value.roles.length > 0) {
-    return resolvedProfile.value.roles[0]
-  }
-  return 'Member'
+  return authStore.isAdmin ? 'Admin' : 'Member'
 })
 
 const profileInitials = computed(() => {
@@ -303,17 +297,6 @@ const handleLogout = async () => {
   font-size: 1.1rem;
 }
 
-.nav-divider {
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
-  padding-left: 1rem;
-  font-size: 0.7rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  color: #64748b;
-  letter-spacing: 0.05em;
-}
-
 /* --- Footer --- */
 .sidebar-footer {
   padding: 1rem;
@@ -337,10 +320,6 @@ const handleLogout = async () => {
 .footer-link:hover {
   background-color: rgba(255,255,255,0.05);
   color: white;
-}
-
-.footer-link.warning {
-  color: #eab308; /* Yellow */
 }
 
 /* --- Main Content --- */
