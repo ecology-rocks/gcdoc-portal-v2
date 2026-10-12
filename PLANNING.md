@@ -67,7 +67,11 @@ Today attendance is only implicit via logged hours — no record of "did they at
 - Extend `src/modules/admin/AttendanceSheet.vue` / `src/modules/admin/MeetingView.vue` so checking a name off on the sign-in sheet writes an attendance record tied to a specific meeting, instead of just printing a sheet
 - New computed eligibility view: e.g. "attended ≥ 2 of 5 meetings this FY" per member, surfaced in `MeetingView.vue` or a new "Board Eligibility" panel — confirm actual threshold rule before building
 
-## Phase 5 — Voucher system + distribution tracking
+## Phase 5 — Voucher system + distribution tracking (first version built 2026-10-12)
+
+**Built**: rules centralized in `src/utils/vouchers.js` (service: credited hrs ≥50 → 1 per 25, floor; blue: cleaning clock hrs, 1 per full 8, floor; Regular/Family/Lifetime earn, Applicants pending until voted in, Associate/Inactive none). `vouchers/{code}` ledger (`src/stores/vouchersStore.js`) with status created → printed → handed_out → used; "Create cards for earned vouchers" (add-only sync), manual issue for instructors/trial workers, Vouchers report page, 10-up cardstock print page with QR codes (`VoucherPrint.vue`), and website redemption via `[gcdoc_voucher]` + `netlify/functions/voucher-redeem.js` (WP Administrators or optional shared `GCDOC_VOUCHER_PIN`). Pre-existing handwritten vouchers stay valid and untracked. Hand-issued sets (`TrialVoucherIssuer.vue`, `InstructorVoucherIssuer.vue`): trial workers get Blue Ribbon vouchers per day by role (presets for Agility/Obedience/Conformation and Barn Hunt, editable); instructors, from the registrar's CSV, get 1 Blue Ribbon voucher per class at 5+ of 7 weeks plus 1 Standard (1x) service hour per week attended (hours even under 5 weeks), counted toward a manually chosen FY (e.g. Session 5 2026 → FY27; log date clamped into that FY). Print layout: two 5-card columns per page, members with 5+ cards get their own column(s). Pending board decision: 150+ hrs → 1 year of free classes instead of class vouchers.
+
+_Original plan notes:_
 
 `src/stores/logsStore.js` already *computes* voucher counts a member has earned (`vouchersByMember`: 1 per 25 hrs once ≥50 hrs/FY; `blueVouchersByMember`: cleaning clock hours / 8) but nothing tracks whether an earned voucher has actually been **issued/handed out or redeemed**. Needs a real ledger, not just a derived count.
 

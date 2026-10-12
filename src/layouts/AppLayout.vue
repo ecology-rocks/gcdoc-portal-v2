@@ -52,6 +52,9 @@
           <RouterLink to="/members" class="nav-item" active-class="active" @click="closeSidebar">
             <span class="icon">👥</span> Members
           </RouterLink>
+          <RouterLink to="/vouchers" class="nav-item" active-class="active" @click="closeSidebar">
+            <span class="icon">🎟️</span> Vouchers
+          </RouterLink>
         </template>
       </nav>
 

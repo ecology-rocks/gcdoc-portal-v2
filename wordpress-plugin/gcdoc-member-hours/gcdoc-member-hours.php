@@ -14,6 +14,9 @@ if (!defined('ABSPATH')) {
 // define('GCDOC_DIRECTORY_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-directory');
 // define('GCDOC_LOG_SUBMIT_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/member-log-submit');
 // define('GCDOC_REPORT_SECRET', 'a-long-random-shared-secret');
+// define('GCDOC_VOUCHER_ENDPOINT', 'https://your-netlify-site.netlify.app/.netlify/functions/voucher-redeem');
+// Optional: lets people who aren't site Administrators mark vouchers used by entering this PIN once per device.
+// define('GCDOC_VOUCHER_PIN', '4826');
 
 define('GCDOC_DUES_PAGE_URL', 'https://gcdoc.com/2026-dues');
 define('GCDOC_DUES_PRODUCT_URL', 'https://gcdoc.com/product/membership-dues/');
@@ -630,6 +633,203 @@ function gcdoc_ajax_log_hours() {
 add_action('wp_ajax_gcdoc_log_hours', 'gcdoc_ajax_log_hours');
 
 
+// --- Voucher cards: [gcdoc_voucher] ---
+// The page every voucher card's QR code opens (https://gcdoc.com/voucher/?code=XXXXXX). Anyone can
+// check whether a code is valid; site Administrators, or anyone who has entered GCDOC_VOUCHER_PIN on
+// this device, can mark it used. Vouchers live in the portal's database (netlify voucher-redeem.js).
+
+define('GCDOC_VOUCHER_PIN_COOKIE', 'gcdoc_voucher_pin');
+define('GCDOC_VOUCHER_PIN_MAX_FAILS', 5); // per IP, per 15 minutes
+
+function gcdoc_voucher_pin_enabled() {
+    return defined('GCDOC_VOUCHER_PIN') && GCDOC_VOUCHER_PIN !== '';
+}
+
+// Stored in the cookie instead of the PIN itself; changing the PIN invalidates every saved device.
+function gcdoc_voucher_pin_token() {
+    return hash_hmac('sha256', (string) GCDOC_VOUCHER_PIN, wp_salt('auth'));
+}
+
+// Who is marking this voucher used, or null if this visitor isn't allowed to.
+function gcdoc_voucher_redeemer() {
+    if (is_user_logged_in() && current_user_can('manage_options')) {
+        return wp_get_current_user()->display_name;
+    }
+    if (gcdoc_voucher_pin_enabled() && isset($_COOKIE[GCDOC_VOUCHER_PIN_COOKIE])
+        && hash_equals(gcdoc_voucher_pin_token(), (string) $_COOKIE[GCDOC_VOUCHER_PIN_COOKIE])) {
+        return 'PIN (website)';
+    }
+    return null;
+}
+
+function gcdoc_voucher_normalize_code($value) {
+    return substr(preg_replace('/[^A-Z0-9]/', '', strtoupper((string) $value)), 0, 12);
+}
+
+function gcdoc_voucher_call($code, $action, $redeemed_by = '') {
+    if (!defined('GCDOC_VOUCHER_ENDPOINT')) {
+        return new WP_Error('gcdoc_config', 'GCDOC_VOUCHER_ENDPOINT is not configured in wp-config.php.');
+    }
+    return gcdoc_call_report_endpoint(GCDOC_VOUCHER_ENDPOINT, [
+        'code' => $code,
+        'action' => $action,
+        'redeemedBy' => $redeemed_by,
+    ]);
+}
+
+// Form posts are handled before the page renders so the PIN cookie can be set, and so a refresh
+// after "Mark Used" can't resubmit (Post/Redirect/Get).
+function gcdoc_voucher_handle_post() {
+    if (empty($_POST['gcdoc_voucher_action'])) {
+        return;
+    }
+    if (!isset($_POST['_gcdoc_voucher_nonce']) || !wp_verify_nonce($_POST['_gcdoc_voucher_nonce'], 'gcdoc_voucher')) {
+        return;
+    }
+
+    $code = gcdoc_voucher_normalize_code($_POST['code'] ?? '');
+    $back = remove_query_arg(['result'], wp_get_referer() ?: home_url(add_query_arg([], $_SERVER['REQUEST_URI'] ?? '')));
+    $back = add_query_arg('code', $code, $back);
+    $action = sanitize_key($_POST['gcdoc_voucher_action']);
+
+    if ($action === 'pin' && gcdoc_voucher_pin_enabled()) {
+        $ip_key = 'gcdoc_vpin_fail_' . md5($_SERVER['REMOTE_ADDR'] ?? '');
+        $fails = (int) get_transient($ip_key);
+        if ($fails >= GCDOC_VOUCHER_PIN_MAX_FAILS) {
+            wp_safe_redirect(add_query_arg('result', 'pin_locked', $back));
+            exit;
+        }
+        if (hash_equals((string) GCDOC_VOUCHER_PIN, trim((string) ($_POST['pin'] ?? '')))) {
+            delete_transient($ip_key);
+            setcookie(GCDOC_VOUCHER_PIN_COOKIE, gcdoc_voucher_pin_token(), [
+                'expires' => time() + 180 * DAY_IN_SECONDS,
+                'path' => COOKIEPATH ?: '/',
+                'secure' => is_ssl(),
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+            wp_safe_redirect(add_query_arg('result', 'pin_ok', $back));
+        } else {
+            set_transient($ip_key, $fails + 1, 15 * MINUTE_IN_SECONDS);
+            wp_safe_redirect(add_query_arg('result', 'pin_bad', $back));
+        }
+        exit;
+    }
+
+    if ($action === 'redeem') {
+        $redeemer = gcdoc_voucher_redeemer();
+        if ($redeemer === null) {
+            wp_safe_redirect(add_query_arg('result', 'not_allowed', $back));
+            exit;
+        }
+        $result = gcdoc_voucher_call($code, 'redeem', $redeemer);
+        if (is_wp_error($result) || empty($result['found'])) {
+            $flag = 'error';
+        } else {
+            $flag = !empty($result['justRedeemed']) ? 'redeemed' : 'already_used';
+        }
+        wp_safe_redirect(add_query_arg('result', $flag, $back));
+        exit;
+    }
+}
+add_action('template_redirect', 'gcdoc_voucher_handle_post');
+
+function gcdoc_voucher_shortcode() {
+    $code = gcdoc_voucher_normalize_code($_GET['code'] ?? '');
+    $result = sanitize_key($_GET['result'] ?? '');
+    $page_url = remove_query_arg(['code', 'result'], home_url(add_query_arg([], $_SERVER['REQUEST_URI'] ?? '')));
+
+    $messages = [
+        'redeemed' => ['ok', '✓ Voucher marked as used.'],
+        'already_used' => ['bad', 'This voucher was already used - it was not marked again.'],
+        'pin_ok' => ['ok', 'PIN accepted. This device can now mark vouchers used.'],
+        'pin_bad' => ['bad', 'That PIN is not correct.'],
+        'pin_locked' => ['bad', 'Too many wrong PIN attempts. Please wait 15 minutes and try again.'],
+        'not_allowed' => ['bad', 'Only site administrators or someone with the voucher PIN can mark vouchers used.'],
+        'error' => ['bad', 'Something went wrong. Please try again.'],
+    ];
+
+    ob_start();
+    ?>
+    <div class="gcdoc-voucher">
+        <?php if (isset($messages[$result])) : ?>
+            <p class="gcdoc-voucher-msg gcdoc-voucher-msg-<?php echo esc_attr($messages[$result][0]); ?>">
+                <?php echo esc_html($messages[$result][1]); ?>
+            </p>
+        <?php endif; ?>
+
+        <?php if ($code !== '') : ?>
+            <?php $voucher = gcdoc_voucher_call($code, 'lookup'); ?>
+            <?php if (is_wp_error($voucher)) : ?>
+                <p class="gcdoc-voucher-msg gcdoc-voucher-msg-bad">Unable to look up vouchers right now. Please try again later.</p>
+            <?php elseif (empty($voucher['found'])) : ?>
+                <p class="gcdoc-voucher-msg gcdoc-voucher-msg-bad">
+                    No voucher found with code <strong><?php echo esc_html($code); ?></strong>. Check the code and try again.
+                </p>
+            <?php else : ?>
+                <?php
+                $is_class = ($voucher['type'] ?? '') === 'class';
+                $is_used = ($voucher['status'] ?? '') === 'used';
+                $redeemer = gcdoc_voucher_redeemer();
+                ?>
+                <div class="gcdoc-voucher-card <?php echo $is_class ? 'is-class' : 'is-blue'; ?>">
+                    <div class="gcdoc-voucher-type"><?php echo $is_class ? 'Service Voucher' : 'Blue Ribbon Voucher'; ?></div>
+                    <div class="gcdoc-voucher-value"><?php echo $is_class ? 'Good for one class' : '$20 off one trial entry'; ?></div>
+                    <?php if (!$is_class) : ?><div class="gcdoc-voucher-alt">Can also be used for one free class</div><?php endif; ?>
+                    <div class="gcdoc-voucher-name"><?php echo esc_html($voucher['memberName']); ?> <span>or household</span></div>
+                    <div class="gcdoc-voucher-meta">
+                        <?php echo esc_html($voucher['fyLabel']); ?>
+                        <?php if (!empty($voucher['reason'])) : ?> &middot; <?php echo esc_html($voucher['reason']); ?><?php endif; ?>
+                        &middot; Code <?php echo esc_html($voucher['code']); ?>
+                    </div>
+
+                    <?php if ($is_used) : ?>
+                        <div class="gcdoc-voucher-status gcdoc-voucher-used">
+                            ✗ USED
+                            <?php if (!empty($voucher['usedAt'])) : ?>
+                                on <?php echo esc_html(wp_date(get_option('date_format'), strtotime($voucher['usedAt']))); ?>
+                            <?php endif; ?>
+                            <?php if (!empty($voucher['usedBy'])) : ?>(<?php echo esc_html($voucher['usedBy']); ?>)<?php endif; ?>
+                        </div>
+                    <?php else : ?>
+                        <div class="gcdoc-voucher-status gcdoc-voucher-valid">✓ VALID - not yet used</div>
+
+                        <?php if ($redeemer !== null) : ?>
+                            <form method="post" class="gcdoc-voucher-redeem">
+                                <?php wp_nonce_field('gcdoc_voucher', '_gcdoc_voucher_nonce'); ?>
+                                <input type="hidden" name="gcdoc_voucher_action" value="redeem">
+                                <input type="hidden" name="code" value="<?php echo esc_attr($voucher['code']); ?>">
+                                <button type="submit" class="gcdoc-voucher-btn">Mark Used</button>
+                            </form>
+                        <?php elseif (gcdoc_voucher_pin_enabled()) : ?>
+                            <form method="post" class="gcdoc-voucher-pin">
+                                <?php wp_nonce_field('gcdoc_voucher', '_gcdoc_voucher_nonce'); ?>
+                                <input type="hidden" name="gcdoc_voucher_action" value="pin">
+                                <input type="hidden" name="code" value="<?php echo esc_attr($voucher['code']); ?>">
+                                <label>Staff: enter the voucher PIN to mark vouchers used
+                                    <input type="password" name="pin" inputmode="numeric" autocomplete="off" required>
+                                </label>
+                                <button type="submit" class="gcdoc-voucher-btn-secondary">Enter PIN</button>
+                            </form>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
+
+        <form method="get" action="<?php echo esc_url($page_url); ?>" class="gcdoc-voucher-lookup">
+            <label>
+                <?php echo $code === '' ? 'Enter a voucher code' : 'Check another code'; ?>
+                <input type="text" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7M2QX">
+            </label>
+            <button type="submit" class="gcdoc-voucher-btn-secondary">Look up</button>
+        </form>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('gcdoc_voucher', 'gcdoc_voucher_shortcode');
+
 function gcdoc_hours_styles() {
     ?>
     <style>
@@ -685,6 +885,27 @@ function gcdoc_hours_styles() {
         .gcdoc-log-message { margin-top: 0.6rem; font-size: 0.9rem; min-height: 1.2em; }
         .gcdoc-log-success { color: #15803d; }
         .gcdoc-log-error { color: #b91c1c; }
+        .gcdoc-voucher { max-width: 460px; }
+        .gcdoc-voucher-msg { padding: 0.75rem 1rem; border-radius: 6px; font-weight: 600; border: 2px solid; }
+        .gcdoc-voucher-msg-ok { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+        .gcdoc-voucher-msg-bad { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
+        .gcdoc-voucher-card { border: 2px solid #1f2937; border-left-width: 10px; border-radius: 8px; padding: 1rem 1.1rem; margin: 1rem 0; background: #fff; }
+        .gcdoc-voucher-card.is-blue { border-left-color: #2563eb; }
+        .gcdoc-voucher-type { font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #4b5563; }
+        .gcdoc-voucher-value { font-size: 1.35rem; font-weight: 800; margin: 0.2rem 0 0.5rem; }
+        .gcdoc-voucher-alt { font-size: 0.9rem; font-weight: 600; color: #1d4ed8; margin: -0.3rem 0 0.5rem; }
+        .gcdoc-voucher-name { font-size: 1.1rem; font-weight: 700; }
+        .gcdoc-voucher-name span { font-weight: 400; font-size: 0.9rem; color: #4b5563; }
+        .gcdoc-voucher-meta { font-size: 0.85rem; color: #4b5563; margin-top: 0.25rem; }
+        .gcdoc-voucher-status { margin-top: 0.9rem; padding: 0.6rem 0.8rem; border-radius: 6px; font-weight: 800; font-size: 1.05rem; }
+        .gcdoc-voucher-valid { background: #f0fdf4; color: #15803d; }
+        .gcdoc-voucher-used { background: #fef2f2; color: #b91c1c; }
+        .gcdoc-voucher-redeem { margin-top: 0.9rem; }
+        .gcdoc-voucher-btn { width: 100%; padding: 0.9rem; font-size: 1.15rem; font-weight: 800; background: #16a34a; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+        .gcdoc-voucher-btn-secondary { padding: 0.55rem 1rem; font-weight: 700; background: #fff; color: #1f2937; border: 2px solid #1f2937; border-radius: 6px; cursor: pointer; }
+        .gcdoc-voucher-pin, .gcdoc-voucher-lookup { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
+        .gcdoc-voucher-pin label, .gcdoc-voucher-lookup label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; font-weight: 600; flex: 1; min-width: 180px; }
+        .gcdoc-voucher-pin input, .gcdoc-voucher-lookup input { padding: 0.55rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; letter-spacing: 0.08em; }
     </style>
     <?php
 }

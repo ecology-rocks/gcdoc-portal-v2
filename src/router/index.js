@@ -10,6 +10,8 @@ import MemberManager from '@/modules/members/MemberManager.vue'
 import MeetingView from '@/modules/admin/MeetingView.vue'
 import KioskView from '@/views/KioskView.vue'
 import MeetingPrintable from '@/modules/admin/MeetingPrintable.vue'
+import VouchersView from '@/modules/admin/VouchersView.vue'
+import VoucherPrint from '@/modules/admin/VoucherPrint.vue'
 import Dashboard from '@/modules/dashboard/Dashboard.vue'
 
 const router = createRouter({
@@ -36,6 +38,8 @@ const router = createRouter({
         { path: 'logs', name: 'logs', component: LogManager, meta: { role: 'admin' } },
         { path: 'meeting', name: 'meeting', component: MeetingView, meta: { role: 'admin' } },
         { path: 'import', name: 'import', component: CsvImporter, meta: { role: 'admin' } },
+        { path: 'vouchers', name: 'vouchers', component: VouchersView, meta: { role: 'admin' } },
+        { path: 'vouchers/print', name: 'voucher-print', component: VoucherPrint, meta: { role: 'admin' } },
         { path: 'meeting/print/:kind?', name: 'meeting-print', component: MeetingPrintable, meta: { role: 'admin' } },
         // Members
         {
