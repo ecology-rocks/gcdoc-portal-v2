@@ -69,6 +69,7 @@ import { ref, computed } from 'vue'
 import { useLogsStore } from '@/stores/logsStore'
 import { useMembersStore } from '@/stores/membersStore' // Ensure member store is available if needed for lookup
 import MemberSelect from '@/components/admin/MemberSelect.vue'
+import { todayLocalIso } from '@/utils/dates'
 
 const logsStore = useLogsStore()
 const memberStore = useMembersStore()
@@ -84,7 +85,7 @@ const TYPES = {
 const form = ref({
   MemberEmail: '',
   MemberName: '', // Will populate on submit
-  Date: new Date().toISOString().split('T')[0],
+  Date: todayLocalIso(),
   Activity: '',
   clockHours: 0,
   type: TYPES.STANDARD

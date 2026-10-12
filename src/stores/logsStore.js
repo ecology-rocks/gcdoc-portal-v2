@@ -22,15 +22,7 @@ import {
   isBlueRibbonLog,
 } from "@/utils/vouchers";
 
-// new Date('2026-10-01') is midnight UTC, i.e. the evening of Sep 30 in US time zones - which
-// would push a log into the previous fiscal year. Parse 'YYYY-MM-DD' as local midnight instead.
-const parseLocalDate = (value) => {
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [y, m, d] = value.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  return new Date(value);
-};
+import { parseLocalDate } from "@/utils/dates";
 
 // Credited hours per member email for a fiscal year (Oct 1 - Sep 30). yearsAgo 0 = current FY.
 const hoursByMemberForFiscalYear = (logs, yearsAgo) => {
@@ -294,7 +286,7 @@ export const useLogsStore = defineStore("logs", {
       const status = logData.Status || "approved";
       await addDoc(collection(db, "logs"), {
         ...logData,
-        Date: Timestamp.fromDate(new Date(logData.Date)),
+        Date: Timestamp.fromDate(parseLocalDate(logData.Date)),
         Status: status,
         FiscalYearRollover: "No",
       });

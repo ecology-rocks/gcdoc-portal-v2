@@ -216,16 +216,19 @@ const getFYDates = (offset = 0) => {
   // Apply Offset (e.g. -1 for Last FY)
   startYear += offset
 
-  const start = new Date(startYear, 9, 1) // Oct 1
-  const end = new Date(startYear + 1, 9, 1) // Oct 1 next year (exclusive in logic, but inclusive in date picker requires -1 day usually, but straightforward works for comparison)
-  // Adjust end to Sept 30 for the Date Picker Display
-  const endDisplay = new Date(startYear + 1, 8, 30)
-
+  // Oct 1 - Sep 30, as 'YYYY-MM-DD' for the date pickers
   return {
-    start: start.toISOString().split('T')[0],
-    end: endDisplay.toISOString().split('T')[0],
+    start: `${startYear}-10-01`,
+    end: `${startYear + 1}-09-30`,
     label: `FY${(startYear + 1).toString().slice(-2)}`
   }
+}
+
+// 'YYYY-MM-DD' -> local midnight. new Date('2026-10-01') would be UTC midnight, which is the evening
+// of Sep 30 here - that pulled the previous FY's Sep 30 logs into the current FY's totals.
+const parseLocalDay = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
 const currentFYLabel = computed(() => getFYDates(0).label)
@@ -310,12 +313,7 @@ const filteredLogs = computed(() => {
   }
 
   if (filters.startDate) {
-    const start = new Date(filters.startDate)
-    start.setHours(0, 0, 0, 0) // Start of day
-    // Adjust for timezone offset issues with simple string parsing if needed, 
-    // but usually string 'YYYY-MM-DD' parses to UTC in some browsers or Local in others.
-    // Safe approach: create date and ensure comparison works. 
-    // Simplified here for brevity.
+    const start = parseLocalDay(filters.startDate) // midnight at the start of that day
     list = list.filter(l => {
       const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)
       return d >= start
@@ -323,7 +321,7 @@ const filteredLogs = computed(() => {
   }
 
   if (filters.endDate) {
-    const end = new Date(filters.endDate)
+    const end = parseLocalDay(filters.endDate)
     end.setHours(23, 59, 59, 999) // End of day
     list = list.filter(l => {
       const d = l.Date?.toDate ? l.Date.toDate() : new Date(l.Date)

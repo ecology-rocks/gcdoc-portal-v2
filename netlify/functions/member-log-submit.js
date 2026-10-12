@@ -63,7 +63,12 @@ export async function handler(event) {
     return { statusCode: 400, body: 'clockHours must be a positive number' }
   }
 
-  const dateInput = payload.date ? new Date(payload.date) : new Date()
+  // A plain 'YYYY-MM-DD' is stored at noon UTC: still that calendar day in Ohio (the portal) and on
+  // this UTC server. new Date('YYYY-MM-DD') would be UTC midnight - the previous evening in Ohio.
+  const dayMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(payload.date || ''))
+  const dateInput = dayMatch
+    ? new Date(Date.UTC(Number(dayMatch[1]), Number(dayMatch[2]) - 1, Number(dayMatch[3]), 12))
+    : payload.date ? new Date(payload.date) : new Date()
   if (Number.isNaN(dateInput.getTime())) {
     return { statusCode: 400, body: 'Invalid date' }
   }

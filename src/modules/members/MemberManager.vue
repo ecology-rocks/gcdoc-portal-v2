@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMembersStore, APPLICANT_CHECKLIST } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
+import { todayLocalIso } from '@/utils/dates'
 import {
   serviceVouchersFor, blueVouchersFor, clockHoursForLog, isBlueRibbonLog,
   voucherEligibility, formatVoucherCount, VOUCHER_ELIGIBILITY_NOTE
@@ -26,7 +27,7 @@ const showReportModal = ref(false)
 // --- Add Missing Hours ---
 const addHoursTarget = ref(null)
 const addHoursForm = reactive({
-  Date: new Date().toISOString().split('T')[0],
+  Date: todayLocalIso(),
   Activity: '',
   type: logType('STANDARD'),
   clockHours: ''
@@ -233,7 +234,7 @@ const toggleApplicantStep = async (member, field, event) => {
 // --- Add Missing Hours ---
 const openAddHours = (member) => {
   addHoursTarget.value = member
-  addHoursForm.Date = new Date().toISOString().split('T')[0]
+  addHoursForm.Date = todayLocalIso()
   addHoursForm.Activity = ''
   addHoursForm.type = logType('STANDARD')
   addHoursForm.clockHours = ''
