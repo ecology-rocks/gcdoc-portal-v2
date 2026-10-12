@@ -3,6 +3,10 @@ import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMembersStore, APPLICANT_CHECKLIST } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
+import {
+  serviceVouchersFor, blueVouchersFor, clockHoursForLog, isBlueRibbonLog,
+  voucherEligibility, formatVoucherCount, VOUCHER_ELIGIBILITY_NOTE
+} from '@/utils/vouchers'
 
 const store = useMembersStore()
 const logsStore = useLogsStore()
@@ -59,14 +63,6 @@ const getFiscalYearBounds = (yearsAgo = 0) => {
   }
 }
 
-const getClockHoursForLog = (log) => {
-  const rawClock = Number(log.clockHours)
-  if (!Number.isNaN(rawClock) && rawClock > 0) return rawClock
-  const credited = Number(log.Hours) || 0
-  const type = log.type || ''
-  if (type.includes('Cleaning / Maintenance') || type.includes('Trial Setup')) return credited / 2
-  return credited
-}
 
 const getFYHoursForRange = (email, startDate, endDate) => {
   if (!email) return 0
@@ -103,11 +99,12 @@ const generateReportData = (member, yearsAgo = 0) => {
   })
 
   const totalHrs = memberLogs.reduce((sum, l) => sum + (Number(l.Hours) || 0), 0)
-  const stdVouchers = totalHrs >= 50 ? Math.floor(totalHrs / 25) : 0
+  const stdVouchers = serviceVouchersFor(totalHrs)
   const blueHours = memberLogs
-    .filter(l => (l.type || '').includes('Cleaning / Maintenance'))
-    .reduce((sum, l) => sum + getClockHoursForLog(l), 0)
-  const blueVouchers = Math.round(blueHours / 8)
+    .filter(isBlueRibbonLog)
+    .reduce((sum, l) => sum + clockHoursForLog(l), 0)
+  const blueVouchers = blueVouchersFor(blueHours)
+  const eligibility = voucherEligibility(member.MembershipType)
 
   reportFYOffset.value = yearsAgo
   printData.value = {
@@ -117,7 +114,11 @@ const generateReportData = (member, yearsAgo = 0) => {
     logs: memberLogs,
     totalHrs: Math.round(totalHrs * 100) / 100,
     stdVouchers,
-    blueVouchers
+    blueVouchers,
+    // Display versions that respect who earns vouchers (pending for applicants, dash if not eligible)
+    stdVouchersDisplay: formatVoucherCount(stdVouchers, eligibility),
+    blueVouchersDisplay: formatVoucherCount(blueVouchers, eligibility),
+    voucherNote: VOUCHER_ELIGIBILITY_NOTE[eligibility]
   }
 }
 
@@ -453,12 +454,12 @@ const copyEmail = async (email) => {
                     <div class="summary-label">Total FY Hours</div>
                 </div>
                 <div class="summary-box">
-                    <div class="summary-value">{{ printData.stdVouchers }}</div>
-                    <div class="summary-label">Standard Vouchers</div>
+                    <div class="summary-value">{{ printData.stdVouchersDisplay }}</div>
+                    <div class="summary-label">Standard Vouchers<span v-if="printData.voucherNote" class="voucher-note"> ({{ printData.voucherNote }})</span></div>
                 </div>
                 <div class="summary-box">
-                    <div class="summary-value">{{ printData.blueVouchers }}</div>
-                    <div class="summary-label">Blue Vouchers</div>
+                    <div class="summary-value">{{ printData.blueVouchersDisplay }}</div>
+                    <div class="summary-label">Blue Vouchers<span v-if="printData.voucherNote" class="voucher-note"> ({{ printData.voucherNote }})</span></div>
                 </div>
             </div>
 
@@ -509,12 +510,12 @@ const copyEmail = async (email) => {
                   <div class="summary-label">Total FY Hours</div>
                 </div>
                 <div class="summary-box">
-                  <div class="summary-value">{{ printData.stdVouchers }}</div>
-                  <div class="summary-label">Standard Vouchers</div>
+                  <div class="summary-value">{{ printData.stdVouchersDisplay }}</div>
+                  <div class="summary-label">Standard Vouchers<span v-if="printData.voucherNote" class="voucher-note"> ({{ printData.voucherNote }})</span></div>
                 </div>
                 <div class="summary-box">
-                  <div class="summary-value">{{ printData.blueVouchers }}</div>
-                  <div class="summary-label">Blue Vouchers</div>
+                  <div class="summary-value">{{ printData.blueVouchersDisplay }}</div>
+                  <div class="summary-label">Blue Vouchers<span v-if="printData.voucherNote" class="voucher-note"> ({{ printData.voucherNote }})</span></div>
                 </div>
               </div>
 
@@ -858,6 +859,8 @@ const copyEmail = async (email) => {
   display: none; /* Hidden on normal screen views */
 }
 
+.voucher-note { text-transform: none; font-weight: 600; color: #b45309; }
+
 @media print {
   /* Hide the normal dashboard UI */
   .manager-header, .members-grid, .modal-overlay {
@@ -892,6 +895,7 @@ const copyEmail = async (email) => {
   .summary-box { text-align: center; }
   .summary-value { font-size: 1.5rem; font-weight: bold; color: #111827; }
   .summary-label { font-size: 0.875rem; color: #64748b; text-transform: uppercase; font-weight: bold;}
+  .voucher-note { text-transform: none; font-weight: 600; color: #b45309; }
   
   .print-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
   .print-table th, .print-table td { border-bottom: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }

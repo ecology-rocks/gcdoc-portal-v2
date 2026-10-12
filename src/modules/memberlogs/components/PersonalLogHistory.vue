@@ -5,7 +5,7 @@
       
       <div class="stat-card highlight-card">
         <div class="stat-value">{{ myVouchers }}</div>
-        <div class="stat-label">Service Vouchers<br>(Fiscal Year)</div>
+        <div class="stat-label">Service Vouchers<br>{{ myVoucherNote || "(Fiscal Year)" }}</div>
       </div>
       
       <div class="stat-card">
@@ -20,7 +20,7 @@
 
       <div class="stat-card blue-card">
         <div class="stat-value">{{ myBlueVouchers }}</div>
-        <div class="stat-label">Blue Vouchers<br>Earned</div>
+        <div class="stat-label">Blue Vouchers<br>{{ myVoucherNote || "Earned" }}</div>
       </div>
 
     </div>
@@ -79,11 +79,11 @@
             </div>
             <div class="summary-box">
               <div class="summary-value">{{ reportData.stdVouchers }}</div>
-              <div class="summary-label">Standard Vouchers</div>
+              <div class="summary-label">Standard Vouchers<span v-if="myVoucherNote"> ({{ myVoucherNote }})</span></div>
             </div>
             <div class="summary-box">
               <div class="summary-value">{{ reportData.blueVouchers }}</div>
-              <div class="summary-label">Blue Vouchers</div>
+              <div class="summary-label">Blue Vouchers<span v-if="myVoucherNote"> ({{ myVoucherNote }})</span></div>
             </div>
           </div>
 
@@ -119,6 +119,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useLogsStore } from '@/stores/logsStore'
 import { useAuthStore } from '@/stores/authStore'
+import { voucherEligibility, formatVoucherCount, VOUCHER_ELIGIBILITY_NOTE } from '@/utils/vouchers'
 
 const logsStore = useLogsStore()
 const authStore = useAuthStore()
@@ -166,9 +167,13 @@ const myFYLogs = computed(() => {
 
 // --- METRICS ---
 
+// Associates/Inactive don't earn vouchers; applicants' are pending until they're voted in
+const myEligibility = computed(() => voucherEligibility(authStore.profile?.MembershipType))
+const myVoucherNote = computed(() => VOUCHER_ELIGIBILITY_NOTE[myEligibility.value])
+
 const myVouchers = computed(() => {
   const email = authStore.user?.email?.toLowerCase()
-  return logsStore.vouchersByMember[email] || 0
+  return formatVoucherCount(logsStore.vouchersByMember[email] || 0, myEligibility.value)
 })
 
 const myFYHours = computed(() => {
@@ -185,7 +190,7 @@ const mySpecialHours = computed(() => {
 
 const myBlueVouchers = computed(() => {
   const email = authStore.user?.email?.toLowerCase()
-  return logsStore.blueVouchersByMember[email] || 0
+  return formatVoucherCount(logsStore.blueVouchersByMember[email] || 0, myEligibility.value)
 })
 
 const openMyReport = () => {

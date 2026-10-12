@@ -275,6 +275,9 @@ function gcdoc_member_hours_shortcode() {
     $membership_type = $report['membershipType'] ?? '';
     $current_fy_hours = $report['duesFiscalYearHours'] ?? 0;
     $dues = gcdoc_calculate_dues($membership_type, $current_fy_hours);
+    // 'earns' | 'pending' (applicants) | 'none' (associates, inactive) - from the member-report function.
+    // Older function versions don't send it, so default to showing vouchers as before.
+    $voucher_status = $report['voucherStatus'] ?? 'earns';
 
     // Voted in after July 1 -> no dues owed for the cycle that starts the following Oct 1,
     // regardless of hours. Only kicks in when a VotedInDate is on file, and only for membership
@@ -335,8 +338,9 @@ function gcdoc_member_hours_shortcode() {
                 <details class="gcdoc-fy-section" <?php echo $index === 0 ? 'open' : ''; ?>>
                     <summary>
                         <strong><?php echo esc_html($fy['label']); ?></strong>
-                        &mdash; <?php echo esc_html($fy['hours']); ?> hrs,
-                        <?php echo esc_html($fy['vouchers']); ?> voucher<?php echo intval($fy['vouchers']) === 1 ? '' : 's'; ?>
+                        &mdash; <?php echo esc_html($fy['hours']); ?> hrs<?php if ($voucher_status !== 'none') : ?>,
+                        <?php echo esc_html($fy['vouchers']); ?> voucher<?php echo intval($fy['vouchers']) === 1 ? '' : 's'; ?><?php if ($voucher_status === 'pending') : ?> (pending vote-in)<?php endif; ?>
+                        <?php endif; ?>
                     </summary>
                     <?php if (empty($fy['logs'])) : ?>
                         <p>No logged hours for this fiscal year.</p>

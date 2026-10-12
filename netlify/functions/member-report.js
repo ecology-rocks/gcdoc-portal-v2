@@ -26,6 +26,17 @@ function getFiscalYearForDate(date) {
   }
 }
 
+// Who earns vouchers, by current membership type - keep in sync with src/utils/vouchers.js.
+//   'earns'   Regular, Family, Lifetime
+//   'pending' Applicants: hours count, vouchers become real once they're voted in
+//   'none'    Associate, Inactive, Nonmember, unknown
+function voucherEligibility(membershipType) {
+  const type = String(membershipType || '').trim().toLowerCase()
+  if (['regular', 'family', 'lifetime'].includes(type)) return 'earns'
+  if (type === 'applicant') return 'pending'
+  return 'none'
+}
+
 export async function handler(event) {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
@@ -56,6 +67,7 @@ export async function handler(event) {
     ])
     const memberData = memberSnap.docs[0]?.data() || {}
     const membershipType = memberData.MembershipType || ''
+    const voucherStatus = voucherEligibility(membershipType)
     const dues2026Paid = Boolean(memberData.Dues2026Paid)
 
     const logs = snap.docs
@@ -88,7 +100,7 @@ export async function handler(event) {
       .map((fy) => ({
         label: fy.label,
         hours: Math.round(fy.hours * 100) / 100,
-        vouchers: fy.hours >= 50 ? Math.floor(fy.hours / 25) : 0,
+        vouchers: voucherStatus === 'none' ? 0 : (fy.hours >= 50 ? Math.floor(fy.hours / 25) : 0),
         logs: fy.logs
       }))
 
@@ -127,6 +139,7 @@ export async function handler(event) {
         fiscalYear: currentFy?.label || '',
         fiscalYearHours: currentFy?.hours || 0,
         vouchers: currentFy?.vouchers || 0,
+        voucherStatus,
         duesFiscalYear: duesFy?.label || '',
         duesFiscalYearHours: duesFy?.hours || 0,
         dues2026Paid,

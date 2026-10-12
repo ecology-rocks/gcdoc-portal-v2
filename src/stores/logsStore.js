@@ -15,19 +15,12 @@ import {
   query,
   where,
 } from "firebase/firestore";
-
-const getClockHours = (log) => {
-  const rawClock = Number(log.clockHours);
-  if (!Number.isNaN(rawClock) && rawClock > 0) return rawClock;
-
-  // Legacy fallback: infer raw clock hours from credited hours.
-  const credited = Number(log.Hours) || 0;
-  const type = log.type || "";
-  if (type.includes("Cleaning / Maintenance") || type.includes("Trial Setup")) {
-    return credited / 2;
-  }
-  return credited;
-};
+import {
+  clockHoursForLog as getClockHours,
+  serviceVouchersFor,
+  blueVouchersFor,
+  isBlueRibbonLog,
+} from "@/utils/vouchers";
 
 // new Date('2026-10-01') is midnight UTC, i.e. the evening of Sep 30 in US time zones - which
 // would push a log into the previous fiscal year. Parse 'YYYY-MM-DD' as local midnight instead.
@@ -116,18 +109,13 @@ export const useLogsStore = defineStore("logs", {
     // 2b. Previous Fiscal Year Total
     lastFiscalYearHours: (state) => hoursByMemberForFiscalYear(state.logs, 1),
 
-    // 3. Service Vouchers (<50 = 0, >=50 = 1 per 25)
+    // 3. Service Vouchers - rules in @/utils/vouchers
     vouchersByMember: (state) => {
       const hoursMap = state.fiscalYearHours;
       const voucherMap = {};
 
       for (const email in hoursMap) {
-        const hrs = hoursMap[email];
-        if (hrs < 50) {
-          voucherMap[email] = 0;
-        } else {
-          voucherMap[email] = Math.floor(hrs / 25);
-        }
+        voucherMap[email] = serviceVouchersFor(hoursMap[email]);
       }
       return voucherMap;
     },
@@ -180,7 +168,7 @@ export const useLogsStore = defineStore("logs", {
           const clock = getClockHours(log);
 
           // Only Cleaning/Maintenance
-          if (type.includes("Cleaning / Maintenance")) {
+          if (isBlueRibbonLog(log)) {
             if (!hoursMap[email]) hoursMap[email] = 0;
             hoursMap[email] += clock;
           }
@@ -189,8 +177,7 @@ export const useLogsStore = defineStore("logs", {
 
       const voucherMap = {};
       for (const email in hoursMap) {
-        // Round to nearest integer
-        voucherMap[email] = Math.round(hoursMap[email] / 8);
+        voucherMap[email] = blueVouchersFor(hoursMap[email]);
       }
       return voucherMap;
     },
