@@ -53,6 +53,38 @@
 
       <div v-if="activeTab === 'logs'" class="tool-card">
         <h2 class="card-title">
+          <span>📅</span> Fix Log Dates Saved a Day Early
+        </h2>
+        <p class="card-desc">
+          Older single entries, website submissions, and CSV imports were saved at midnight UTC, so they show
+          (and count) one day early - an Oct 1 log lands in the previous fiscal year. Scan first; nothing changes
+          until you confirm.
+        </p>
+        <button @click="scanDates" :disabled="dateFix.busy" class="btn-import" style="background-color: #0891b2;">
+          {{ dateFix.busy ? 'Working...' : 'Scan logs' }}
+        </button>
+        <div v-if="dateFix.found" class="date-fix-result">
+          <p v-if="dateFix.found.length === 0" class="ok">✓ No affected logs found.</p>
+          <template v-else>
+            <p>
+              <strong>{{ dateFix.found.length }}</strong> logs show one day early.
+              <strong>{{ dateFix.fyChanges }}</strong> of them will move to a different fiscal year (shown on Sep 30, really Oct 1).
+            </p>
+            <ul class="date-fix-sample">
+              <li v-for="log in dateFix.found.slice(0, 5)" :key="log.id">
+                {{ log.MemberEmail }} · {{ log.Hours }} hrs · shows {{ shownDate(log) }} → {{ fixedDate(log) }}
+              </li>
+              <li v-if="dateFix.found.length > 5">…and {{ dateFix.found.length - 5 }} more</li>
+            </ul>
+            <button @click="applyDateFix" :disabled="dateFix.busy" class="btn-import" style="background-color: #0e7490;">
+              Fix {{ dateFix.found.length }} logs
+            </button>
+          </template>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'logs'" class="tool-card">
+        <h2 class="card-title">
           <span>🧹</span> Data Hygiene
         </h2>
         <p class="card-desc">
@@ -129,7 +161,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import Papa from 'papaparse'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
@@ -212,6 +244,42 @@ const runCleaner = async () => {
     errorLog.value.push("Cleanup Error: " + e.message)
   } finally {
     uploading.value = false
+  }
+}
+
+// --- One-time date repair (see logsStore.findUtcMidnightLogs) ---
+const dateFix = reactive({ busy: false, found: null, fyChanges: 0 })
+
+// What the portal shows today (local time = the previous evening) vs. the intended UTC day
+const shownDate = (log) => log.date.toLocaleDateString('en-US')
+const fixedDate = (log) => log.date.toLocaleDateString('en-US', { timeZone: 'UTC' })
+
+const scanDates = async () => {
+  dateFix.busy = true
+  try {
+    const found = await stores.logs.findUtcMidnightLogs()
+    dateFix.found = found
+    // Shown as Sep 30 but really Oct 1: the fix moves it into the next fiscal year
+    dateFix.fyChanges = found.filter(l => l.date.getUTCMonth() === 9 && l.date.getUTCDate() === 1).length
+  } catch (e) {
+    errorLog.value.push('Date scan failed: ' + e.message)
+  } finally {
+    dateFix.busy = false
+  }
+}
+
+const applyDateFix = async () => {
+  const n = dateFix.found.length
+  if (!confirm(`Move ${n} logs to the day they were meant to be? (${dateFix.fyChanges} change fiscal year.)`)) return
+  dateFix.busy = true
+  try {
+    await stores.logs.fixUtcMidnightLogs(dateFix.found)
+    alert(`Fixed ${n} log dates.`)
+    dateFix.found = null
+  } catch (e) {
+    errorLog.value.push('Date fix failed: ' + e.message)
+  } finally {
+    dateFix.busy = false
   }
 }
 
@@ -376,6 +444,10 @@ const processExport = async () => {
 .btn-import:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .card-desc { font-size: 0.875rem; color: #6b7280; margin-bottom: 1.5rem; }
+
+.date-fix-result { margin-top: 0.75rem; font-size: 0.875rem; }
+.date-fix-result .ok { color: #15803d; font-weight: 600; }
+.date-fix-sample { margin: 0.4rem 0 0.75rem; padding-left: 1.1rem; color: #4b5563; font-size: 0.8rem; }
 
 .export-option {
   display: flex;
