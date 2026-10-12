@@ -38,7 +38,7 @@
         </label>
         <label class="grow">
           Member
-          <input v-model="search" type="search" placeholder="All members">
+          <input v-model="search" type="search" placeholder="Name, email, or role">
         </label>
       </div>
 
@@ -70,7 +70,8 @@
         <div class="card-text">
           <div class="card-org">GCDOC · {{ VOUCHER_TYPES[v.type].label }}</div>
           <div class="card-value">{{ VOUCHER_TYPES[v.type].value }}</div>
-          <div class="card-name">{{ v.memberName }}</div>
+          <div v-if="v.memberName" class="card-name">{{ v.memberName }}</div>
+          <div v-else class="card-name card-write-in">Name:</div>
           <div class="card-household">or household</div>
           <div class="card-meta">
             {{ v.source === 'manual' ? `Issued ${fyLabel(v.fiscalYear)}` : `Earned ${fyLabel(v.fiscalYear)}` }}<span
@@ -127,7 +128,7 @@ const matchingCards = computed(() => {
     .filter(v => v.fiscalYear === fyStartYear.value && (type.value === 'all' || v.type === type.value))
     .filter(v => statusFilter.value === 'created' ? v.status === 'created' : v.status !== 'created')
     .filter(v => !sourceFilter.value || v.source === sourceFilter.value)
-    .filter(v => !term || v.memberName.toLowerCase().includes(term) || v.memberEmail.includes(term))
+    .filter(v => !term || v.memberName.toLowerCase().includes(term) || v.memberEmail.includes(term) || (v.reason || "").toLowerCase().includes(term))
 })
 
 // "Jane Smith" -> "smith jane" for sorting by last name
@@ -141,7 +142,8 @@ const TYPE_ORDER = { class: 0, blue: 1 }
 const groups = computed(() => {
   const byMember = {}
   matchingCards.value.forEach(v => {
-    const key = v.memberEmail || v.memberName
+    // Write-in cards (no person yet) stack by what they were issued for, e.g. one trial role
+    const key = v.memberEmail || v.memberName || `write-in|${v.reason}`
     ;(byMember[key] ||= { name: v.memberName, cards: [] }).cards.push(v)
   })
   return Object.values(byMember)
@@ -272,6 +274,8 @@ const markPrinted = async () => {
 .card-org { font-size: 7pt; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #374151; }
 .card-value { font-size: 12pt; font-weight: 800; margin: 0.04in 0 0.08in; line-height: 1.1; }
 .card-name { font-size: 10.5pt; font-weight: 700; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Blank line to write a name on */
+.card-write-in { font-weight: 600; font-size: 8pt; color: #374151; border-bottom: 1px solid #000; padding-top: 0.12in; padding-bottom: 0.02in; }
 .card-household { font-size: 7.5pt; color: #374151; }
 /* Up to two lines, e.g. "Issued FY27 · Agility Mar 6-8, 2027 · Ring Steward/Worker Coordinator" */
 .card-meta { font-size: 7pt; line-height: 1.2; color: #374151; margin-top: auto; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

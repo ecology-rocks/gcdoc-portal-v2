@@ -58,9 +58,9 @@
     <div class="issuer-actions">
       <button type="button" class="btn-secondary" @click="addRole">+ Add role</button>
       <span class="summary">
-        {{ totalVouchers }} voucher{{ totalVouchers === 1 ? '' : 's' }} for {{ readyRows.length }}
-        {{ readyRows.length === 1 ? 'person' : 'people' }}
-        <span v-if="unassigned" class="warn">· {{ unassigned }} role{{ unassigned === 1 ? '' : 's' }} without a person will be skipped</span>
+        {{ totalVouchers }} voucher{{ totalVouchers === 1 ? '' : 's' }} across {{ readyRows.length }}
+        role{{ readyRows.length === 1 ? '' : 's' }}
+        <span v-if="unassigned" class="note">· {{ unassigned }} role{{ unassigned === 1 ? '' : 's' }} without a person will print with a blank name line</span>
       </span>
       <button type="submit" class="btn-primary" :disabled="!canIssue || issuing">
         {{ issuing ? 'Issuing...' : 'Issue trial vouchers' }}
@@ -91,10 +91,12 @@ const TRIAL_PRESETS = {
   Obedience: STANDARD_TRIAL_ROLES,
   Conformation: STANDARD_TRIAL_ROLES,
   'Barn Hunt': [
-    ['Secretary', 2],
+    ['Pre-Trial Secretary', 1],
+    ['Trial Secretary', 1],
     ['Chair', 1],
     ['Food Chair', 1],
-    ['Volunteer Appreciation', 2]
+    ['Volunteer Appreciation', 2],
+    ['Blind Steward', 1]
   ]
 }
 
@@ -126,8 +128,9 @@ const addRole = () => roles.value.push(makeRole('', 1))
 
 const rowTotal = (row) => Math.max(0, Number(row.perDay) || 0) * Math.max(0, Number(days.value) || 0)
 
-const readyRows = computed(() => roles.value.filter(r => r.memberEmail && r.role.trim() && rowTotal(r) > 0))
-const unassigned = computed(() => roles.value.filter(r => !r.memberEmail && rowTotal(r) > 0).length)
+// Roles without a person still get vouchers - the cards print with a blank line to write a name on
+const readyRows = computed(() => roles.value.filter(r => r.role.trim() && rowTotal(r) > 0))
+const unassigned = computed(() => readyRows.value.filter(r => !r.memberEmail).length)
 const totalVouchers = computed(() => readyRows.value.reduce((s, r) => s + rowTotal(r), 0))
 const canIssue = computed(() => trialType.value.trim() && trialDates.value.trim() && readyRows.value.length > 0)
 
@@ -140,16 +143,16 @@ const issue = async () => {
   const setId = `trial-${Date.now()}`
   const specs = []
   for (const row of readyRows.value) {
-    const m = membersStore.getMemberByEmail(row.memberEmail)
-    if (!m) continue
+    const m = row.memberEmail ? membersStore.getMemberByEmail(row.memberEmail) : null
     const role = row.role.trim()
     for (let n = 0; n < rowTotal(row); n++) {
       specs.push({
         type: voucherType.value,
         source: 'manual',
         fiscalYear: fiscalYear.value,
-        memberEmail: m.Email.toLowerCase(),
-        memberName: `${m.FirstName || ''} ${m.LastName || ''}`.trim(),
+        // Blank when no one is assigned yet - the card gets a write-in line
+        memberEmail: m ? m.Email.toLowerCase() : '',
+        memberName: m ? `${m.FirstName || ''} ${m.LastName || ''}`.trim() : '',
         reason: `${label} · ${role}`,
         set: { kind: 'trial', setId, label, trialType: trialType.value.trim(), trialDates: trialDates.value.trim(), role, days: days.value, perDay: row.perDay }
       })
@@ -195,7 +198,7 @@ const issue = async () => {
 
 .issuer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
 .summary { flex: 1; font-size: 0.875rem; color: #374151; }
-.warn { color: #b45309; }
+.note { color: #4b5563; font-style: italic; }
 .btn-primary { background: #4f46e5; color: white; border: none; padding: 0.5rem 0.9rem; border-radius: 0.375rem; font-weight: 600; cursor: pointer; }
 .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
 .btn-secondary { border: 1px solid #cbd5e1; background: white; color: #1f2937; padding: 0.45rem 0.8rem; border-radius: 0.375rem; font-weight: 600; cursor: pointer; }

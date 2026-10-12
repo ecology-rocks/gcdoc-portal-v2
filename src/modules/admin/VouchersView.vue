@@ -127,7 +127,7 @@
               <tbody>
                 <tr v-for="g in s.rows" :key="g.key">
                   <td>{{ g.role }}</td>
-                  <td>{{ g.memberName }}</td>
+                  <td>{{ g.memberName || "(write-in name)" }}</td>
                   <td>{{ VOUCHER_TYPES[g.type].short }}</td>
                   <td class="num">{{ g.vouchers.length }}</td>
                 </tr>

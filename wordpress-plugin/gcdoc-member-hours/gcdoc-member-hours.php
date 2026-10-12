@@ -776,7 +776,11 @@ function gcdoc_voucher_shortcode() {
                     <div class="gcdoc-voucher-type"><?php echo $is_class ? 'Service Voucher' : 'Blue Ribbon Voucher'; ?></div>
                     <div class="gcdoc-voucher-value"><?php echo $is_class ? 'Good for one class' : '$20 off one trial entry'; ?></div>
                     <?php if (!$is_class) : ?><div class="gcdoc-voucher-alt">Can also be used for one free class</div><?php endif; ?>
-                    <div class="gcdoc-voucher-name"><?php echo esc_html($voucher['memberName']); ?> <span>or household</span></div>
+                    <?php if (!empty($voucher['memberName'])) : ?>
+                        <div class="gcdoc-voucher-name"><?php echo esc_html($voucher['memberName']); ?> <span>or household</span></div>
+                    <?php else : ?>
+                        <div class="gcdoc-voucher-name">Name written on card <span>or household</span></div>
+                    <?php endif; ?>
                     <div class="gcdoc-voucher-meta">
                         <?php echo esc_html($voucher['fyLabel']); ?>
                         <?php if (!empty($voucher['reason'])) : ?> &middot; <?php echo esc_html($voucher['reason']); ?><?php endif; ?>
