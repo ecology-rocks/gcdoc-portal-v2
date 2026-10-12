@@ -5,44 +5,82 @@ import { useSheetsStore } from '@/stores/sheetsStore'
 import MemberSelect from '@/components/admin/MemberSelect.vue'
 
 const props = defineProps(['sheet'])
-const emit = defineEmits(['saved', 'statusChange'])
+const emit = defineEmits(['saved', 'statusChange', 'deleted'])
 
 const logsStore = useLogsStore()
 const sheetsStore = useSheetsStore()
 
 const rows = ref([])
 const hasUnsavedChanges = ref(false)
+const saving = ref(false)
 const isMobile = ref(false)
-const sports = ['Agility', 'Barn Hunt', 'Conformation', 'Rally', 'Obedience', 'Freestyle', 'Coursing', 'Other']
+// Delete is a testing aid - only shown when running the local dev server (npm run dev)
+const isDev = import.meta.env.DEV
 
-// Quick-select defaults
-const defaultSettings = reactive({
-  category: 'STANDARD',
-  sport: '',
+const locations = ['Northcutt', 'The Land']
+
+// The three entry types, as one-tap buttons. Values are the stored log type strings.
+const typeOptions = [
+  { key: 'STANDARD', label: 'Standard', hint: '1x' },
+  { key: 'MAINT', label: 'Maint', hint: '2x' },
+  { key: 'SETUP', label: 'Double', hint: '2x setup/teardown' }
+]
+
+// Sheet-wide details, saved on the sheet itself
+const details = reactive({
+  startDate: '',
+  endDate: '',
+  location: '',
   notes: ''
 })
 
-// The row currently being typed
+// The row currently being typed. Type stays selected between entries.
 const currentRow = reactive({
   MemberEmail: '',
-  clockHours: ''
+  clockHours: '',
+  type: logsStore.logType('STANDARD')
 })
+
+// 'YYYY-MM-DD' -> 'M/D/YYYY' without going through Date (avoids timezone shifts)
+const formatDay = (iso) => {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${Number(m)}/${Number(d)}/${y}`
+}
+
+// "Start - End at Location (Notes)" - used as every entry's Activity
+const sheetLabel = computed(() => {
+  let label = formatDay(details.startDate) || 'Undated sheet'
+  if (details.endDate && details.endDate !== details.startDate) label += ` - ${formatDay(details.endDate)}`
+  if (details.location) label += ` at ${details.location}`
+  if (details.notes.trim()) label += ` (${details.notes.trim()})`
+  return label
+})
+
+// The label rows were last synced to. When the sheet details change, rows still showing this
+// label follow along; rows whose Activity was edited by hand are left alone.
+let appliedLabel = ''
 
 watch(() => props.sheet, async (newSheet) => {
   if (hasUnsavedChanges.value && !confirm('Discard changes?')) return
 
   hasUnsavedChanges.value = false
 
+  details.startDate = newSheet.startDate || ''
+  details.endDate = newSheet.endDate || ''
+  details.location = newSheet.location || ''
+  details.notes = newSheet.notes || ''
+  appliedLabel = sheetLabel.value
+
   const existing = logsStore.getLogsBySheet(newSheet.shortId)
-  
+
   if (existing.length > 0) {
     rows.value = existing.map(l => ({
       id: l.id,
       MemberEmail: l.MemberEmail,
-      Date: new Date(l.Date.toDate()).toISOString().split('T')[0],
       Activity: l.Activity,
-      clockHours: l.clockHours || l.Hours || 0, 
-      type: logsStore.logType(l.type), 
+      clockHours: l.clockHours || l.Hours || 0,
+      type: logsStore.logType(l.type),
       isExisting: true
     }))
   } else {
@@ -50,46 +88,37 @@ watch(() => props.sheet, async (newSheet) => {
   }
 }, { immediate: true })
 
-const compiledDefaults = computed(() => {
-  const cat = defaultSettings.category
-  const typeString = logsStore.logType(cat)
-  let act = defaultSettings.notes || ''
-
-  if (cat === 'MAINT') {
-    act = act || 'Cleaning / Maintenance'
-  } else if (cat === 'SETUP') {
-    act = act ? `Trial Setup - ${defaultSettings.sport} (${act})` : `Trial Setup - ${defaultSettings.sport}`
-  } else if (cat === 'PRACTICE') {
-    act = act ? `Practices - ${defaultSettings.sport} (${act})` : `Practices - ${defaultSettings.sport}`
-  } else if (cat === 'ADMIN') {
-    act = act ? `Meetings and Admin (${act})` : `Meetings and Admin`
-  } else if (cat === 'STANDARD') {
-    act = act || 'Standard Volunteer Work'
-  } else {
-    act = act || 'Other Volunteer Work'
-  }
-
-  return { activity: act, type: typeString }
-})
+const detailsChanged = () => {
+  const newLabel = sheetLabel.value
+  rows.value.forEach(row => {
+    if (row.Activity === appliedLabel) row.Activity = newLabel
+  })
+  appliedLabel = newLabel
+  markDirty()
+}
 
 const commitCurrentRow = () => {
   if (!currentRow.MemberEmail) return alert('Select a member first.')
-  
+
   rows.value.push({
     MemberEmail: currentRow.MemberEmail,
-    Date: new Date().toISOString().split('T')[0],
-    Activity: compiledDefaults.value.activity,
-    type: compiledDefaults.value.type,
+    Activity: sheetLabel.value,
+    type: currentRow.type,
     clockHours: parseFloat(currentRow.clockHours) || 0
   })
 
-  // Reset just the entry fields for the next person
+  // Reset just the member and hours for the next person
   currentRow.MemberEmail = ''
   currentRow.clockHours = ''
   markDirty()
 }
 
 const markDirty = () => hasUnsavedChanges.value = true
+
+const setRowType = (row, key) => {
+  row.type = logsStore.logType(key)
+  markDirty()
+}
 
 const getSheetLogCount = () => rows.value.filter(row => row.MemberEmail).length
 
@@ -106,22 +135,60 @@ const deleteRow = async (idx) => {
   }
 }
 
+// Returns true once everything is saved
 const saveChanges = async () => {
-  const toCreate = rows.value.filter(r => !r.id && r.MemberEmail)
-  const toUpdate = rows.value.filter(r => r.id && r.MemberEmail)
+  // Guard against overlapping saves (double-clicks, or Save Progress + Mark Done)
+  if (saving.value) return false
+  if (!details.startDate) {
+    alert('Set the sheet Start Date first - it decides which fiscal year these hours count toward.')
+    return false
+  }
+  if (details.endDate && details.endDate < details.startDate) {
+    alert('The End Date is before the Start Date.')
+    return false
+  }
 
-  await logsStore.batchSave(toCreate, toUpdate, props.sheet.shortId)
-  await sheetsStore.updateLogCount(props.sheet.id, getSheetLogCount())
+  saving.value = true
+  try {
+    // Every entry is dated by the sheet's start date, so it lands in that fiscal year
+    rows.value.forEach(r => { r.Date = details.startDate })
+    const toCreate = rows.value.filter(r => !r.id && r.MemberEmail)
+    const toUpdate = rows.value.filter(r => r.id && r.MemberEmail)
 
-  hasUnsavedChanges.value = false
-  emit('saved')
+    await sheetsStore.updateSheetDetails(props.sheet.id, { ...details })
+    Object.assign(props.sheet, details)
+    await logsStore.batchSave(toCreate, toUpdate, props.sheet.shortId)
+    await sheetsStore.updateLogCount(props.sheet.id, getSheetLogCount())
+
+    hasUnsavedChanges.value = false
+    emit('saved')
+    return true
+  } finally {
+    saving.value = false
+  }
 }
 
 const toggleStatus = async () => {
   const newStatus = props.sheet.status === 'processed' ? 'pending' : 'processed'
+  // Marking done saves any unsaved entries first, so nothing is lost
+  if (newStatus === 'processed' && hasUnsavedChanges.value) {
+    try {
+      if (!(await saveChanges())) return
+    } catch (e) {
+      alert('Could not save entries, so the sheet was not marked done: ' + e.message)
+      return
+    }
+  }
   await sheetsStore.updateSheetStatus(props.sheet.id, newStatus)
   props.sheet.status = newStatus
   emit('statusChange')
+}
+
+const deleteSheet = async () => {
+  if (!confirm(`DEV: Permanently delete sheet #${props.sheet.shortId}, its image, and all ${getSheetLogCount()} of its log entries?`)) return
+  await sheetsStore.deleteSheet(props.sheet)
+  hasUnsavedChanges.value = false
+  emit('deleted')
 }
 
 let mediaQuery = null
@@ -146,44 +213,49 @@ onUnmounted(() => {
     <div class="entry-header">
       <div class="stats">
         <strong>Entries</strong>: {{ rows.length }}
-        <button @click="toggleStatus" class="status-toggle" :class="sheet.status">
-          {{ sheet.status === 'processed' ? '↺ Revert' : '✓ Mark Done' }}
+        <button @click="toggleStatus" class="status-toggle" :class="sheet.status" :disabled="saving">
+          {{ sheet.status === 'processed' ? '↺ Revert' : (hasUnsavedChanges ? '✓ Save & Mark Done' : '✓ Mark Done') }}
+        </button>
+        <button v-if="isDev" @click="deleteSheet" class="dev-delete-btn" :disabled="saving">
+          🗑 Delete Sheet (dev)
         </button>
       </div>
-      <button @click="saveChanges" class="save-btn" :disabled="!hasUnsavedChanges"
+      <button @click="saveChanges" class="save-btn" :disabled="!hasUnsavedChanges || saving"
         :class="{ dirty: hasUnsavedChanges }">
-        {{ hasUnsavedChanges ? 'Save Progress' : 'Saved' }}
+        {{ saving ? 'Saving...' : (hasUnsavedChanges ? 'Save Progress' : 'Saved') }}
       </button>
     </div>
 
     <div class="defaults-bar">
-      <span class="defaults-label">1. Set Activity Details</span>
+      <span class="defaults-label">1. Sheet Details</span>
       <div class="defaults-controls">
-        <select v-model="defaultSettings.category" class="input-field max-w-xs">
-          <option value="STANDARD">Standard (1x)</option>
-          <option value="MAINT">🧹 Maintenance (2x)</option>
-          <option value="SETUP">🏗️ Trial Setup (2x)</option>
-          <option value="PRACTICE">🐕 Practices (1x)</option>
-          <option value="ADMIN">📝 Admin/Meetings (1x)</option>
-          <option value="OTHER">❓ Other (1x)</option>
-        </select>
-        
-        <select 
-          v-if="['SETUP', 'PRACTICE'].includes(defaultSettings.category)" 
-          v-model="defaultSettings.sport" 
-          class="input-field max-w-xs"
-        >
-          <option value="">Select Sport...</option>
-          <option v-for="s in sports" :key="s" :value="s">{{ s }}</option>
-        </select>
-
-        <input 
-          v-model="defaultSettings.notes" 
-          type="text" 
-          placeholder="Notes (e.g. Fixed hot water)" 
-          class="input-field flex-1"
-        />
+        <div class="form-group">
+          <label>Start Date (sets fiscal year)</label>
+          <input v-model="details.startDate" type="date" class="input-field" :class="{ missing: !details.startDate }" @change="detailsChanged">
+        </div>
+        <div class="form-group">
+          <label>End Date</label>
+          <input v-model="details.endDate" type="date" class="input-field" :min="details.startDate" @change="detailsChanged">
+        </div>
+        <div class="form-group">
+          <label>Location</label>
+          <select v-model="details.location" class="input-field" @change="detailsChanged">
+            <option value="">Select...</option>
+            <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
+          </select>
+        </div>
+        <div class="form-group flex-1">
+          <label>Notes (optional)</label>
+          <input
+            v-model="details.notes"
+            type="text"
+            placeholder="e.g. Fixed hot water"
+            class="input-field"
+            @input="detailsChanged"
+          />
+        </div>
       </div>
+      <div class="label-preview">Activity label: <strong>{{ sheetLabel }}</strong></div>
     </div>
 
     <div class="active-entry-box">
@@ -205,6 +277,20 @@ onUnmounted(() => {
           >
         </div>
         
+        <div class="form-group type-col">
+          <label>Type (stays selected)</label>
+          <div class="type-toggle">
+            <button
+              v-for="t in typeOptions"
+              :key="t.key"
+              type="button"
+              :class="[t.key.toLowerCase(), { selected: currentRow.type === logsStore.logType(t.key) }]"
+              :title="t.hint"
+              @click="currentRow.type = logsStore.logType(t.key)"
+            >{{ t.label }}</button>
+          </div>
+        </div>
+
         <div class="form-group btn-col">
           <button @click="commitCurrentRow" class="add-btn" :disabled="!currentRow.MemberEmail">
             + Add Row
@@ -221,7 +307,7 @@ onUnmounted(() => {
             <th style="width: 30px">#</th>
             <th>Member</th>
             <th>Activity</th>
-            <th style="width: 150px">Type</th>
+            <th style="width: 210px">Type</th>
             <th style="width: 60px; text-align: center;">Hrs</th>
             <th style="width: 30px"></th>
           </tr>
@@ -234,11 +320,16 @@ onUnmounted(() => {
             </td>
             <td><input v-model="row.Activity" type="text" @input="markDirty" class="table-input"></td>
             <td>
-              <select v-model="row.type" @change="markDirty" class="table-input">
-                <option :value="logsStore.logType('STANDARD')">Normal (1x)</option>
-                <option :value="logsStore.logType('MAINT')">Maint (2x)</option>
-                <option :value="logsStore.logType('SETUP')">Setup (2x)</option>
-              </select>
+              <div class="type-toggle compact">
+                <button
+                  v-for="t in typeOptions"
+                  :key="t.key"
+                  type="button"
+                  :class="[t.key.toLowerCase(), { selected: row.type === logsStore.logType(t.key) }]"
+                  :title="t.hint"
+                  @click="setRowType(row, t.key)"
+                >{{ t.label }}</button>
+              </div>
             </td>
             <td>
               <input v-model.number="row.clockHours" type="number" step="0.25" @input="markDirty" class="table-input text-center">
@@ -268,11 +359,15 @@ onUnmounted(() => {
           <div class="log-card-grid">
             <div class="log-card-field">
               <label>Type</label>
-              <select v-model="row.type" @change="markDirty" class="table-input">
-                <option :value="logsStore.logType('STANDARD')">Normal (1x)</option>
-                <option :value="logsStore.logType('MAINT')">Maint (2x)</option>
-                <option :value="logsStore.logType('SETUP')">Setup (2x)</option>
-              </select>
+              <div class="type-toggle compact">
+                <button
+                  v-for="t in typeOptions"
+                  :key="t.key"
+                  type="button"
+                  :class="[t.key.toLowerCase(), { selected: row.type === logsStore.logType(t.key) }]"
+                  @click="setRowType(row, t.key)"
+                >{{ t.label }}</button>
+              </div>
             </div>
 
             <div class="log-card-field">
@@ -376,9 +471,11 @@ onUnmounted(() => {
 
 .entry-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   align-items: flex-end;
 }
+.member-col { min-width: 220px; }
 
 .form-group {
   display: flex;
@@ -426,6 +523,50 @@ onUnmounted(() => {
   height: 38px;
 }
 .add-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+
+.input-field.missing { border-color: #f59e0b; background: #fffbeb; }
+
+.label-preview {
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.type-col { width: auto; }
+
+/* One-tap type picker: Standard / Maint / Double */
+.type-toggle {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+.type-toggle button {
+  padding: 0 0.75rem;
+  height: 38px;
+  border: none;
+  border-right: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.type-toggle button:last-child { border-right: none; }
+.type-toggle button.standard.selected { background: #4f46e5; color: white; }
+.type-toggle button.maint.selected { background: #d97706; color: white; }
+.type-toggle button.setup.selected { background: #7c3aed; color: white; }
+.type-toggle.compact button { height: 28px; padding: 0 0.5rem; font-size: 0.75rem; }
+
+.dev-delete-btn {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: 0.25rem;
+  border: 1px dashed #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: bold;
+  cursor: pointer;
+}
 
 .max-w-xs { max-width: 200px; }
 .flex-1 { flex: 1; min-width: 150px; }

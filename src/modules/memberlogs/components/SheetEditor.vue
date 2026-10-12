@@ -3,7 +3,7 @@
     <div class="editor-toolbar">
       <div class="sheet-meta">
         <strong>Sheet #{{ sheet.shortId }}</strong>
-        <span>{{ formatDate(sheet.uploadedAt) }}</span>
+        <span>Uploaded {{ formatDate(sheet.uploadedAt) }}</span>
       </div>
       <div class="sheet-actions">
         <button class="btn-secondary" @click="showImageModal = true">View Image</button>
@@ -15,6 +15,7 @@
       :sheet="sheet" 
       @saved="$emit('saved')"
       @statusChange="$emit('statusChange')"
+      @deleted="$emit('deleted')"
     />
 
     <div v-if="showImageModal" class="image-modal" @click.self="showImageModal = false">
@@ -50,7 +51,7 @@ import { useSheetsStore } from '@/stores/sheetsStore'
 import SheetDataEntry from './SheetDataEntry.vue'
 
 const props = defineProps(['sheet'])
-defineEmits(['saved', 'statusChange'])
+defineEmits(['saved', 'statusChange', 'deleted'])
 
 const sheetsStore = useSheetsStore()
 const showImageModal = ref(false)

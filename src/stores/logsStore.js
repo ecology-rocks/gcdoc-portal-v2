@@ -29,6 +29,38 @@ const getClockHours = (log) => {
   return credited;
 };
 
+// new Date('2026-10-01') is midnight UTC, i.e. the evening of Sep 30 in US time zones - which
+// would push a log into the previous fiscal year. Parse 'YYYY-MM-DD' as local midnight instead.
+const parseLocalDate = (value) => {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+  return new Date(value);
+};
+
+// Credited hours per member email for a fiscal year (Oct 1 - Sep 30). yearsAgo 0 = current FY.
+const hoursByMemberForFiscalYear = (logs, yearsAgo) => {
+  const hoursMap = {};
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const startYear = (now.getMonth() >= 9 ? currentYear : currentYear - 1) - yearsAgo;
+  const startDate = new Date(startYear, 9, 1);
+  const endDate = new Date(startYear + 1, 9, 1);
+
+  logs.forEach((log) => {
+    const d = log.Date?.toDate ? log.Date.toDate() : new Date(log.Date);
+    if (d >= startDate && d < endDate) {
+      const email = log.MemberEmail || "unknown";
+      const hrs = Number(log.Hours) || 0;
+      if (!hoursMap[email]) hoursMap[email] = 0;
+      hoursMap[email] += hrs;
+    }
+  });
+  return hoursMap;
+};
+
 export const useLogsStore = defineStore("logs", {
   state: () => ({
     logs: [],
@@ -372,11 +404,11 @@ async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
           ...log,
           Hours: rawHours * multiplier,
           clockHours: rawHours,
-          Date: Timestamp.fromDate(new Date(log.Date)),
+          Date: Timestamp.fromDate(parseLocalDate(log.Date)),
         };
       };
 
-      newLogs.forEach((log) => {
+      const newRefs = newLogs.map((log) => {
         const docRef = doc(collection(db, "logs"));
         const finalData = prepareLogData(log);
         batch.set(docRef, {
@@ -385,10 +417,7 @@ async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
           Status: "approved",
           FiscalYearRollover: "No",
         });
-        
-        // FIX: Attach the newly generated ID back to the object 
-        // so the UI knows it has been saved and won't duplicate it.
-        log.id = docRef.id; 
+        return docRef;
       });
 
       updatedLogs.forEach((log) => {
@@ -399,6 +428,12 @@ async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
       });
 
       await batch.commit();
+
+      // Attach the new IDs back to the row objects only once the write succeeded, so the UI
+      // knows they're saved and a second save updates them instead of duplicating them.
+      newLogs.forEach((log, i) => {
+        log.id = newRefs[i].id;
+      });
     },
 
     async deleteLog(logId) {

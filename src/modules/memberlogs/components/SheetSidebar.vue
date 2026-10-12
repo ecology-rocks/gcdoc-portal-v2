@@ -11,13 +11,12 @@
 
       <div class="date-filters">
         <select v-model="filterYear">
-          <option value="all">All Years</option>
-          <option value="2026">2026</option>
-          <option value="2025">2025</option>
+          <option value="all">All Fiscal Years</option>
+          <option v-for="fy in fiscalYearOptions" :key="fy" :value="fy">{{ fiscalYearLabel(fy) }}</option>
         </select>
         <select v-model="filterMonth">
           <option value="all">All Months</option>
-          <option v-for="(m, i) in months" :key="i" :value="i">{{ m }}</option>
+          <option v-for="i in fiscalMonthOrder" :key="i" :value="i">{{ months[i] }}</option>
         </select>
       </div>
 
@@ -27,7 +26,7 @@
         </button>
         <div v-else class="upload-box">
           <h4>Upload Image</h4>
-          <input type="file" @change="handleFileUpload" accept="image/*" capture="environment">
+          <input type="file" @change="handleFileUpload" accept="image/*">
           <div class="actions">
             <button @click="uploadSheet" :disabled="!uploadFile" class="btn-primary">Confirm</button>
             <button @click="showUpload = false" class="btn-text">Cancel</button>
@@ -49,7 +48,7 @@
       >
         <div class="sheet-row">
           <span class="sheet-id">#{{ sheet.shortId }}</span>
-          <span class="sheet-date">{{ formatDate(sheet.uploadedAt) }}</span>
+          <span class="sheet-date">{{ sheetSummary(sheet) }}</span>
         </div>
         <div class="sheet-row">
           <span class="status-badge" :class="sheet.status">
@@ -78,6 +77,41 @@ const showCompleted = ref(false)
 const filterYear = ref('all')
 const filterMonth = ref('all')
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+// Month indexes in fiscal-year order (Oct - Sep)
+const fiscalMonthOrder = [9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+// Filter by the sheet's start date (what its logs are dated by), falling back to upload date
+const sheetDate = (s) => {
+  if (s.startDate) {
+    const [y, m, d] = s.startDate.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  return s.uploadedAt.toDate ? s.uploadedAt.toDate() : new Date(s.uploadedAt)
+}
+
+const formatDay = (iso) => {
+  const [y, m, d] = iso.split('-')
+  return `${Number(m)}/${Number(d)}/${y}`
+}
+
+const sheetSummary = (s) => {
+  if (!s.startDate) return `Uploaded ${formatDate(s.uploadedAt)}`
+  let text = formatDay(s.startDate)
+  if (s.endDate && s.endDate !== s.startDate) text += ` - ${formatDay(s.endDate)}`
+  if (s.location) text += ` · ${s.location}`
+  return text
+}
+
+// Fiscal year runs Oct 1 - Sep 30, identified by its starting calendar year
+const fiscalStartYear = (d) => d.getMonth() >= 9 ? d.getFullYear() : d.getFullYear() - 1
+
+const fiscalYearLabel = (startYear) => `FY${String(startYear + 1).slice(-2)} (Oct ${startYear} - Sep ${startYear + 1})`
+
+const fiscalYearOptions = computed(() => {
+  const years = new Set(sheetsStore.sheets.map(s => fiscalStartYear(sheetDate(s))))
+  years.add(fiscalStartYear(new Date()))
+  return [...years].sort((a, b) => b - a)
+})
 
 onMounted(() => {
   logsStore.initLogs()
@@ -87,9 +121,9 @@ onMounted(() => {
 const filteredSheets = computed(() => {
   return sheetsStore.sheets.filter(s => {
     if (!showCompleted.value && s.status === 'processed') return false
-    const d = s.uploadedAt.toDate ? s.uploadedAt.toDate() : new Date(s.uploadedAt)
-    if (filterYear.value !== 'all' && d.getFullYear().toString() !== filterYear.value) return false
-    if (filterMonth.value !== 'all' && d.getMonth().toString() !== filterMonth.value) return false
+    const d = sheetDate(s)
+    if (filterYear.value !== 'all' && fiscalStartYear(d) !== filterYear.value) return false
+    if (filterMonth.value !== 'all' && d.getMonth() !== filterMonth.value) return false
     return true
   })
 })

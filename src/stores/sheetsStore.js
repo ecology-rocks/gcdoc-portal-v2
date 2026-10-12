@@ -2,8 +2,8 @@ import { defineStore } from 'pinia'
 import { db, storage } from '@/firebase'
 import { useAuthStore } from '@/stores/authStore'
 // ADDED: onSnapshot
-import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, onSnapshot } from 'firebase/firestore'
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, onSnapshot, where, writeBatch } from 'firebase/firestore'
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 
 export const useSheetsStore = defineStore('sheets', {
   state: () => ({
@@ -87,6 +87,28 @@ export const useSheetsStore = defineStore('sheets', {
     },
     async updateSheetRotation(sheetId, rotation) {
       await updateDoc(doc(db, 'sheets', sheetId), { rotation })
+    },
+
+    // startDate/endDate are 'YYYY-MM-DD' strings; location and notes label the sheet's entries
+    async updateSheetDetails(sheetId, { startDate, endDate, location, notes }) {
+      await updateDoc(doc(db, 'sheets', sheetId), { startDate, endDate, location, notes })
+    },
+
+    // Dev-only testing aid: removes the sheet, every log entered from it, and its image
+    async deleteSheet(sheet) {
+      const logsSnap = await getDocs(query(collection(db, 'logs'), where('SourceSheet', '==', sheet.shortId)))
+      const batch = writeBatch(db)
+      logsSnap.docs.forEach(d => batch.delete(d.ref))
+      batch.delete(doc(db, 'sheets', sheet.id))
+      await batch.commit()
+
+      if (sheet.storagePath) {
+        try {
+          await deleteObject(storageRef(storage, sheet.storagePath))
+        } catch (e) {
+          console.warn('Sheet image could not be deleted from storage', e)
+        }
+      }
     },
   }
 })

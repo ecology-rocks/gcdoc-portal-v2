@@ -11,6 +11,7 @@
         :sheet="activeSheet"
         @saved="refreshSheet"
         @statusChange="refreshSheet"
+        @deleted="activeSheet = null"
       />
       
       <div v-else class="empty-state">
