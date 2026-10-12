@@ -398,34 +398,6 @@ async checkOut(logId, startTimeSeconds, overrideClockHours = null) {
       });
     },
 
-    // --- One-time repair: logs saved at exactly midnight UTC ---
-    // Older single-entry, website, and CSV-import saves stored 'YYYY-MM-DD' as UTC midnight, which
-    // is the previous evening in Ohio, so they show (and count) a day early. Portal saves land at
-    // 04:00/05:00 UTC and sheet/instructor/website saves are now noon UTC, so an exact UTC-midnight
-    // timestamp reliably marks an affected log. Returns [{ id, ref, date, MemberEmail, Hours, ... }].
-    async findUtcMidnightLogs() {
-      const snap = await getDocs(collection(db, "logs"));
-      return snap.docs
-        .filter((d) => {
-          const ts = d.data().Date;
-          return ts?.seconds !== undefined && ts.seconds % 86400 === 0 && !ts.nanoseconds;
-        })
-        .map((d) => ({ id: d.id, ref: d.ref, date: d.data().Date.toDate(), ...d.data() }));
-    },
-
-    // Move each affected log to noon UTC of the day it was meant to be, the same calendar day in
-    // Ohio and on the Netlify server
-    async fixUtcMidnightLogs(affected) {
-      for (let i = 0; i < affected.length; i += 450) {
-        const batch = writeBatch(db);
-        affected.slice(i, i + 450).forEach((log) => {
-          batch.update(log.ref, { Date: Timestamp.fromMillis(log.date.getTime() + 12 * 3600 * 1000) });
-        });
-        await batch.commit();
-      }
-      return affected.length;
-    },
-
     async deleteLog(logId) {
       await deleteDoc(doc(db, "logs", logId));
     },
