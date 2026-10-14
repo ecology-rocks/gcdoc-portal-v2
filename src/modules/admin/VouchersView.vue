@@ -103,6 +103,13 @@
           <span class="hint">Safe to run again - only adds cards that are missing (e.g. after an applicant is voted in).</span>
         </div>
 
+        <div v-if="isDev" class="dev-tools">
+          <button class="dev-reset-btn" :disabled="unprintedEarned.length === 0 || resetting" @click="devResetEarnedCards">
+            {{ resetting ? 'Resetting...' : `DEV: Reset ${unprintedEarned.length} unprinted earned cards` }}
+          </button>
+          <span class="hint">Deletes earned cards for {{ fyName(fyStartYear) }} that haven't been printed, so they can be recreated from corrected hours. Printed cards and hand-issued sets are left alone.</span>
+        </div>
+
         <details class="issue-box">
           <summary>➕ Issue trial vouchers (secretary, chair, and other trial workers)</summary>
           <TrialVoucherIssuer :fiscal-year-options="fiscalYearOptions" :default-fiscal-year="currentFyStart" />
@@ -226,6 +233,7 @@ const membersStore = useMembersStore()
 const logsStore = useLogsStore()
 const vouchersStore = useVouchersStore()
 const loading = ref(true)
+const isDev = import.meta.env.DEV
 
 onMounted(async () => {
   await Promise.all([membersStore.initMembers(), logsStore.initLogs(), vouchersStore.initVouchers()])
@@ -385,6 +393,23 @@ const createEarnedCards = async () => {
   }
 }
 
+const unprintedEarned = computed(() => fyVouchers.value.filter(v => v.source === 'earned' && v.status === 'created'))
+const resetting = ref(false)
+
+const devResetEarnedCards = async () => {
+  const n = unprintedEarned.value.length
+  if (!confirm(`DEV: Permanently delete ${n} unprinted earned voucher cards for ${fyName(fyStartYear.value)}? Their codes will be gone; run "Create cards" afterwards to regenerate.`)) return
+  resetting.value = true
+  try {
+    const deleted = await vouchersStore.devResetUnprintedEarned(fyStartYear.value)
+    alert(`Deleted ${deleted} cards.`)
+  } catch (e) {
+    alert('Could not reset cards: ' + e.message)
+  } finally {
+    resetting.value = false
+  }
+}
+
 const markHandedOut = async (r) => {
   const printed = memberCards(r.email).filter(v => v.status === 'printed')
   try {
@@ -533,6 +558,19 @@ const exportCsv = () => {
 .btn-secondary { border: 1px solid #cbd5e1; background: white; color: #1f2937; padding: 0.45rem 0.8rem; border-radius: 0.375rem; font-weight: 600; text-decoration: none; font-size: 0.9rem; }
 .btn-link { background: none; border: none; color: #4f46e5; font-weight: 600; cursor: pointer; padding: 0; font-size: 0.8rem; }
 .btn-link.danger { color: #b91c1c; }
+
+.dev-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+.dev-reset-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: 0.375rem;
+  border: 1px dashed #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: bold;
+  cursor: pointer;
+}
+.dev-reset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .issue-box { margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem; }
 .issue-box summary { font-weight: 600; cursor: pointer; }

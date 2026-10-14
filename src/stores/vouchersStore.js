@@ -235,6 +235,18 @@ export const useVouchersStore = defineStore('vouchers', {
       const v = this.vouchers.find(x => x.code === code)
       if (!v || v.status !== 'created') throw new Error('Only vouchers that have not been printed can be deleted.')
       await deleteDoc(doc(db, 'vouchers', code))
+    },
+
+    // DEV ONLY: delete every earned card for a fiscal year that was never printed, so they can be
+    // recreated from corrected hours. Printed / handed-out / used cards and hand-issued sets are kept.
+    async devResetUnprintedEarned(fyStartYear) {
+      const targets = this.vouchers.filter(v => v.fiscalYear === fyStartYear && v.source === 'earned' && v.status === 'created')
+      for (let i = 0; i < targets.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db)
+        targets.slice(i, i + BATCH_LIMIT).forEach(v => batch.delete(doc(db, 'vouchers', v.code)))
+        await batch.commit()
+      }
+      return targets.length
     }
   }
 })
