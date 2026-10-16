@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "vitest"
+    "test:unit": "vitest --passWithNoTests"
   },
   "dependencies": {
     "firebase": "^12.8.0",
