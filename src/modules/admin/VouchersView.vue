@@ -116,6 +116,11 @@
         </details>
 
         <details class="issue-box">
+          <summary>➕ Issue one-off vouchers (board service, thank-yous)</summary>
+          <OneOffVoucherIssuer :fiscal-year-options="fiscalYearOptions" :default-fiscal-year="currentFyStart" />
+        </details>
+
+        <details class="issue-box">
           <summary>➕ Issue instructor vouchers + hours (registrar's session list)</summary>
           <InstructorVoucherIssuer />
         </details>
@@ -221,6 +226,7 @@ import { useLogsStore } from '@/stores/logsStore'
 import { useVouchersStore, VOUCHER_TYPES } from '@/stores/vouchersStore'
 import TrialVoucherIssuer from './components/TrialVoucherIssuer.vue'
 import InstructorVoucherIssuer from './components/InstructorVoucherIssuer.vue'
+import OneOffVoucherIssuer from './components/OneOffVoucherIssuer.vue'
 import {
   voucherTotalsByMember,
   voucherEligibility,
@@ -419,7 +425,7 @@ const markHandedOut = async (r) => {
   }
 }
 
-// Vouchers issued by hand (trial workers, instructors), grouped into their sets. Older one-off
+// Vouchers issued by hand (trial workers, instructors, one-offs), grouped into their sets. Older one-off
 // manual vouchers without a set fall back to grouping by their reason.
 const manualSets = computed(() => {
   const sets = {}
