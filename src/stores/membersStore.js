@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { db } from '@/firebase'
 import { useAuthStore } from '@/stores/authStore'
-import { collection, onSnapshot, doc, setDoc, getDoc, deleteDoc, writeBatch, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, getDoc, writeBatch, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore'
 
 const normalizeEmail = (value) => (value || '').trim().toLowerCase()
 
@@ -328,24 +328,40 @@ export const useMembersStore = defineStore('members', {
       }
       if (batchCount > 0) await logsBatch.commit()
 
-      // Move the changelog to the new member doc (subcollections don't follow a copied doc),
+      // Voucher cards issued to this member
+      const vouchersSnap = await getDocs(query(collection(db, 'vouchers'), where('memberEmail', '==', oldNorm)))
+      const voucherDocs = [...vouchersSnap.docs]
+      while (voucherDocs.length > 0) {
+        const voucherBatch = writeBatch(db)
+        voucherDocs.splice(0, 400).forEach(v => voucherBatch.update(v.ref, { memberEmail: newNorm }))
+        await voucherBatch.commit()
+      }
+
+      // Copy the changelog to the new member doc (subcollections don't follow a copied doc),
       // then record the email change itself
       const historySnap = await getDocs(changelogCollection(oldNorm))
       const historyDocs = [...historySnap.docs]
       while (historyDocs.length > 0) {
         const historyBatch = writeBatch(db)
-        historyDocs.splice(0, 200).forEach(entry => {
+        historyDocs.splice(0, 400).forEach(entry => {
           historyBatch.set(doc(changelogCollection(newNorm), entry.id), entry.data())
-          historyBatch.delete(entry.ref)
         })
         await historyBatch.commit()
       }
       await setDoc(doc(changelogCollection(newNorm)), newChangelogEntry('email_change', { from: oldNorm, to: newNorm }))
 
-      // Remove old member document
-      await deleteDoc(oldDocRef)
+      // Keep the old member doc (and its history) as an Inactive record pointing at the new email,
+      // rather than deleting it
+      const oldBatch = writeBatch(db)
+      oldBatch.update(oldDocRef, { MembershipType: 'Inactive', MovedToEmail: newNorm, updatedAt: new Date() })
+      addChangelogToBatch(oldBatch, oldNorm, 'status_change', {
+        from: memberData.MembershipType || '',
+        to: 'Inactive',
+        note: `Email changed to ${newNorm}`
+      })
+      await oldBatch.commit()
 
-      return { logsUpdated: totalLogs }
+      return { logsUpdated: totalLogs, vouchersUpdated: vouchersSnap.size }
     },
 
     async getExportData({ excludeInactive = false } = {}) {

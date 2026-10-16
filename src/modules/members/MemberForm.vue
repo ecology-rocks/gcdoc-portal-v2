@@ -22,15 +22,20 @@
           </div>
           <div class="form-group col-full">
             <label>Email Address (ID)</label>
-            <input 
-              v-model="form.Email" 
-              type="email" 
-              required 
-              :class="{ 'disabled-input': isEditMode }" 
-              :disabled="isEditMode"
-              placeholder="Used for login & lookup"
-            >
-            <p v-if="isEditMode" class="help-text">Email cannot be changed as it serves as the Member ID.</p>
+            <div class="email-row">
+              <input
+                v-model="form.Email"
+                type="email"
+                required
+                :class="{ 'disabled-input': isEditMode }"
+                :disabled="isEditMode"
+                placeholder="Used for login & lookup"
+              >
+              <button v-if="isEditMode" type="button" class="btn-change-email" :disabled="changingEmail" @click="changeEmail">
+                {{ changingEmail ? 'Changing...' : 'Change Email' }}
+              </button>
+            </div>
+            <p v-if="isEditMode" class="help-text">The email is the Member ID. Changing it moves their hour logs, vouchers and history to the new address.</p>
           </div>
         </div>
       </div>
@@ -228,6 +233,30 @@ onMounted(async () => {
   }
 })
 
+// Email is the doc ID, so it can't just be edited in place - transfer the member (and their logs,
+// vouchers and history) to a new doc, then keep editing under the new ID
+const changingEmail = ref(false)
+const changeEmail = async () => {
+  const oldEmail = route.params.id
+  const newEmail = (prompt(`New email address for ${form.value.FirstName} ${form.value.LastName}:`, oldEmail) || '').trim().toLowerCase()
+  if (!newEmail || newEmail === oldEmail.toLowerCase()) return
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return alert('That doesn\'t look like a valid email address.')
+  if (!confirm(`Change this member's email from "${oldEmail}" to "${newEmail}"?\n\nTheir hour logs, vouchers and history move to the new address. Update the email on their WordPress account to match.`)) return
+
+  changingEmail.value = true
+  try {
+    const result = await store.transferMemberEmail(oldEmail, newEmail)
+    form.value.Email = newEmail
+    if (form.value.id) form.value.id = newEmail
+    await router.replace(`/members/edit/${newEmail}`)
+    alert(`Email changed. ${result.logsUpdated} log(s) and ${result.vouchersUpdated} voucher(s) moved to the new address.`)
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    changingEmail.value = false
+  }
+}
+
 const handleSubmit = async () => {
   submitting.value = true
   try {
@@ -373,6 +402,25 @@ const handleSubmit = async () => {
   color: #6b7280;
   cursor: not-allowed;
 }
+
+.email-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-change-email {
+  flex-shrink: 0;
+  background: white;
+  color: #4f46e5;
+  border: 1px solid #c7d2fe;
+  border-radius: 0.375rem;
+  padding: 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-change-email:hover { background: #eef2ff; }
+.btn-change-email:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .help-text {
   font-size: 0.75rem;

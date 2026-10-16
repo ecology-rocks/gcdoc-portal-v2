@@ -23,7 +23,7 @@
           <span>🔁</span> Update User Email
         </h2>
         <p class="card-desc">
-          Transfers a member's profile and all associated logs to a new email address. The old document will be deleted.
+          Transfers a member's profile, logs, vouchers and history to a new email address. The old record is kept but marked Inactive.
         </p>
         <label style="display:block; font-size:0.875rem; font-weight:600; margin-bottom:0.25rem;">Current Email</label>
         <input
@@ -184,12 +184,12 @@ const runEmailTransfer = async () => {
     emailTransferResult.value = { error: 'Both email addresses are required.' }
     return
   }
-  if (!confirm(`Transfer member profile and ALL logs from "${oldEmail}" to "${newEmail}"? This cannot be undone.`)) return
+  if (!confirm(`Transfer member profile and ALL logs from "${oldEmail}" to "${newEmail}"?`)) return
   transferring.value = true
   emailTransferResult.value = null
   try {
     const result = await stores.members.transferMemberEmail(oldEmail, newEmail)
-    emailTransferResult.value = { success: `Done. ${result.logsUpdated} log(s) updated to new email.` }
+    emailTransferResult.value = { success: `Done. ${result.logsUpdated} log(s) and ${result.vouchersUpdated} voucher(s) updated to new email.` }
     emailTransferOld.value = ''
     emailTransferNew.value = ''
   } catch (e) {
