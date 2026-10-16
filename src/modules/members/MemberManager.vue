@@ -16,6 +16,7 @@ const logType = logsStore.logType
 const route = useRoute()
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const selectedType = ref('')
+const selectedJoinYear = ref('')
 const unpaidDuesOnly = ref(false)
 const showInactive = ref(false)
 const minHours = ref('')
@@ -150,7 +151,9 @@ const uniqueTypes = computed(() => {
     return [...new Set(types)].sort()
 })
 
-/* Replace the filteredMembers computed property */
+// Joined is a year, stored as a number or a string depending on how the member was added
+const joinYearOf = (m) => String(m.Joined ?? '').trim()
+
 const filteredMembers = computed(() => {
     let list = store.members
     
@@ -160,6 +163,10 @@ const filteredMembers = computed(() => {
         // Inactive members (moved away, deceased, etc.) are kept for historical records but
         // hidden from the default view. Picking "Inactive" from the type filter still shows them.
         list = list.filter(m => (m.MembershipType || '').toLowerCase() !== 'inactive')
+    }
+
+    if (selectedJoinYear.value !== '' && selectedJoinYear.value !== null) {
+        list = list.filter(m => joinYearOf(m) === String(selectedJoinYear.value))
     }
 
     if (search.value) {
@@ -344,6 +351,7 @@ const copyEmail = async (email) => {
                         <option value="">All Types</option>
                         <option v-for="type in uniqueTypes" :key="type" :value="type">{{ type }}</option>
                     </select>
+                    <input type="number" v-model="selectedJoinYear" placeholder="Join year" class="hours-input join-year-input">
                     <div class="hours-filter">
                         <input type="number" v-model="minHours" placeholder="Min hrs" class="hours-input">
                         <span>&ndash;</span>
@@ -375,7 +383,7 @@ const copyEmail = async (email) => {
             </div>
             <div class="dues-stat">
                 <span class="dues-stat-value">{{ duesSummary.total }}</span>
-                <span class="dues-stat-label">Total{{ (search || selectedType || unpaidDuesOnly || minHours !== '' || maxHours !== '') ? ' (filtered)' : '' }}</span>
+                <span class="dues-stat-label">Total{{ (search || selectedType || selectedJoinYear !== '' || unpaidDuesOnly || minHours !== '' || maxHours !== '') ? ' (filtered)' : '' }}</span>
             </div>
         </div>
 
@@ -399,6 +407,7 @@ const copyEmail = async (email) => {
                     <div class="secondary-text">{{ m.Phone1 }}</div>
                     <div class="hours-text">FY Hours: <strong>{{ getFYHours(m.Email) }}</strong></div>
                     <div class="hours-text">Last Year FY Hours: <strong>{{ getLastYearFYHours(m.Email) }}</strong></div>
+                    <div v-if="joinYearOf(m)" class="secondary-text">Joined: {{ joinYearOf(m) }}</div>
                     <div v-if="m.VotedInDate" class="secondary-text">Voted In: {{ m.VotedInDate }}</div>
                     <button
                         @click="toggleDuesPaid(m)"
@@ -715,6 +724,8 @@ const copyEmail = async (email) => {
   color: #6b7280;
   font-size: 0.875rem;
 }
+
+.hours-input.join-year-input { width: 100px; }
 
 .hours-input {
   width: 70px;
