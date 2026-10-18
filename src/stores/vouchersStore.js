@@ -9,6 +9,10 @@ import { collection, onSnapshot, doc, writeBatch, Timestamp, deleteDoc } from 'f
 // One doc per physical voucher card at vouchers/{code}. The code is the doc ID, is printed on
 // the card, and is what the card's QR code points to. Lifecycle (status):
 //   created -> printed -> handed_out -> used
+// 'printed' is shown everywhere as "Published" (STATUS_LABELS) - the stored value was kept to avoid a
+// migration. Published = released: the member sees it on the website (and can reprint it), and it can no
+// longer be deleted. Unpublished ('created') cards are hidden from members, so a mistaken set can be
+// deleted before anyone sees it.
 // Fields: code, type ('class' = Service Voucher | 'blue' = Blue Ribbon Voucher), source ('earned' | 'manual'), memberEmail, memberName,
 //   fiscalYear (FY start year, e.g. 2025 for FY26), reason (manual only, printed on the card),
 //   set (manual sets, e.g. trial workers), createdAt/By, printedAt, handedOutAt, usedAt, usedBy.
@@ -18,6 +22,8 @@ export const VOUCHER_TYPES = {
   class: { label: 'Service Voucher', short: 'Service', value: 'Good for one class' },
   blue: { label: 'Blue Ribbon Voucher', short: 'Blue Ribbon', value: '$20 off one trial entry', alt: 'Can also be used for one free class' }
 }
+
+export const STATUS_LABELS = { created: 'unpublished', printed: 'published', handed_out: 'handed out', used: 'used' }
 
 // The website page (WP plugin [gcdoc_voucher] shortcode) each card's QR code opens
 export const VOUCHER_REDEEM_URL = 'https://gcdoc.com/voucher/'
@@ -230,15 +236,15 @@ export const useVouchersStore = defineStore('vouchers', {
       }
     },
 
-    // Only for vouchers that were never printed - a printed card may already be out in the world
+    // Only for unpublished vouchers - a published card may already be printed and out in the world
     async deleteUnprintedVoucher(code) {
       const v = this.vouchers.find(x => x.code === code)
-      if (!v || v.status !== 'created') throw new Error('Only vouchers that have not been printed can be deleted.')
+      if (!v || v.status !== 'created') throw new Error('Only unpublished vouchers can be deleted.')
       await deleteDoc(doc(db, 'vouchers', code))
     },
 
-    // DEV ONLY: delete every earned card for a fiscal year that was never printed, so they can be
-    // recreated from corrected hours. Printed / handed-out / used cards and hand-issued sets are kept.
+    // DEV ONLY: delete every earned card for a fiscal year that was never published, so they can be
+    // recreated from corrected hours. Published / handed-out / used cards and hand-issued sets are kept.
     async devResetUnprintedEarned(fyStartYear) {
       const targets = this.vouchers.filter(v => v.fiscalYear === fyStartYear && v.source === 'earned' && v.status === 'created')
       for (let i = 0; i < targets.length; i += BATCH_LIMIT) {

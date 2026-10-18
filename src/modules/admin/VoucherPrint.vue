@@ -24,8 +24,8 @@
         <label>
           Cards
           <select v-model="statusFilter">
-            <option value="created">Not printed yet</option>
-            <option value="reprint">Already printed (reprint)</option>
+            <option value="created">Not published yet</option>
+            <option value="reprint">Already published (reprint)</option>
           </select>
         </label>
         <label>
@@ -52,13 +52,14 @@
           class="btn-secondary"
           :disabled="cards.length === 0 || marking"
           @click="markPrinted"
-        >✓ Mark these {{ cards.length }} as printed</button>
+        >✓ Mark these {{ cards.length }} as published</button>
       </div>
       <p class="tip">
         Print on letter-size cardstock at <strong>100% / Actual size</strong> with margins set to <strong>None</strong>,
         then cut along the dashed lines. Each column is one stack: members with {{ OWN_COLUMN_MIN }}+ vouchers get their own
         column(s); smaller ones share. Blue Ribbon cards have a thick stripe on the left edge.
-        After checking the printout, use "Mark as printed" so these cards drop off the "Not printed yet" list.
+        After checking the printout, use "Mark as published" so these cards drop off the "Not published yet" list.
+        Published cards show on the member's voucher list on the website, and can no longer be deleted.
       </p>
     </div>
 
@@ -200,12 +201,12 @@ const printCards = () => window.print()
 
 const marking = ref(false)
 const markPrinted = async () => {
-  if (!confirm(`Mark ${cards.value.length} cards as printed? Do this after checking they printed correctly.`)) return
+  if (!confirm(`Mark ${cards.value.length} cards as published? Members will see them on the website, and they can't be deleted after this.`)) return
   marking.value = true
   try {
-    await vouchersStore.setStatus(cards.value, 'printed')
+    await vouchersStore.setStatus(cards.value, 'printed') // 'printed' = Published
   } catch (e) {
-    alert('Could not mark as printed: ' + e.message)
+    alert('Could not mark as published: ' + e.message)
   } finally {
     marking.value = false
   }

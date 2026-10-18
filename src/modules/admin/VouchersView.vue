@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1>Vouchers</h1>
-        <p class="subtitle">Earned vouchers by fiscal year (Oct 1 - Sep 30), and the printed voucher cards that track them.</p>
+        <p class="subtitle">Earned vouchers by fiscal year (Oct 1 - Sep 30), and the voucher cards that track them. Members see their cards on the website once they're published.</p>
       </div>
       <label class="fy-select">
         Fiscal year
@@ -88,8 +88,8 @@
             <div class="ledger-title">{{ VOUCHER_TYPES[t].label }}s</div>
             <div class="ledger-counts">
               <span><strong>{{ ledger[t].total }}</strong> cards</span>
-              <span>{{ ledger[t].created }} not printed</span>
-              <span>{{ ledger[t].printed }} printed</span>
+              <span>{{ ledger[t].created }} unpublished</span>
+              <span>{{ ledger[t].printed }} published</span>
               <span>{{ ledger[t].handed_out }} handed out</span>
               <span>{{ ledger[t].used }} used</span>
             </div>
@@ -105,9 +105,9 @@
 
         <div v-if="isDev" class="dev-tools">
           <button class="dev-reset-btn" :disabled="unprintedEarned.length === 0 || resetting" @click="devResetEarnedCards">
-            {{ resetting ? 'Resetting...' : `DEV: Reset ${unprintedEarned.length} unprinted earned cards` }}
+            {{ resetting ? 'Resetting...' : `DEV: Reset ${unprintedEarned.length} unpublished earned cards` }}
           </button>
-          <span class="hint">Deletes earned cards for {{ fyName(fyStartYear) }} that haven't been printed, so they can be recreated from corrected hours. Printed cards and hand-issued sets are left alone.</span>
+          <span class="hint">Deletes earned cards for {{ fyName(fyStartYear) }} that haven't been published, so they can be recreated from corrected hours. Published cards and hand-issued sets are left alone.</span>
         </div>
 
         <details class="issue-box">
@@ -130,7 +130,11 @@
           <div v-for="s in manualSets" :key="s.key" class="set">
             <div class="set-head">
               <strong>{{ s.label }}</strong>
+              <span v-if="s.fromWebsite" class="badge badge-web">from website</span>
               <span class="small">{{ statusSummary(s.vouchers) }}</span>
+              <button v-if="s.vouchers.some(v => v.status === 'created')" class="btn-link" @click="publishCards(s.vouchers, s.label)">
+                ✓ Publish
+              </button>
               <button v-if="s.vouchers.every(v => v.status === 'created')" class="btn-link danger" @click="deleteSet(s)">
                 Delete set
               </button>
@@ -193,6 +197,11 @@
                 <template v-if="memberCards(r.email).length">
                   <div class="small">{{ statusSummary(memberCards(r.email)) }}</div>
                   <button
+                    v-if="memberCards(r.email).some(v => v.status === 'created')"
+                    class="btn-link"
+                    @click="publishCards(memberCards(r.email), r.name)"
+                  >✓ Publish</button>
+                  <button
                     v-if="memberCards(r.email).some(v => v.status === 'printed')"
                     class="btn-link"
                     @click="markHandedOut(r)"
@@ -223,7 +232,7 @@ import { ref, computed, onMounted } from 'vue'
 import Papa from 'papaparse'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
-import { useVouchersStore, VOUCHER_TYPES } from '@/stores/vouchersStore'
+import { useVouchersStore, VOUCHER_TYPES, STATUS_LABELS } from '@/stores/vouchersStore'
 import TrialVoucherIssuer from './components/TrialVoucherIssuer.vue'
 import InstructorVoucherIssuer from './components/InstructorVoucherIssuer.vue'
 import OneOffVoucherIssuer from './components/OneOffVoucherIssuer.vue'
@@ -351,7 +360,7 @@ const ledger = computed(() => {
   return counts
 })
 
-const STATUS_WORDS = { created: 'not printed', printed: 'printed', handed_out: 'handed out', used: 'used' }
+const STATUS_WORDS = STATUS_LABELS
 const statusSummary = (vouchers) => {
   const counts = {}
   vouchers.forEach(v => { counts[v.status] = (counts[v.status] || 0) + 1 })
@@ -416,6 +425,17 @@ const devResetEarnedCards = async () => {
   }
 }
 
+// Release unpublished cards to members (stored status 'printed' = Published) without printing them here
+const publishCards = async (vouchers, label) => {
+  const unpublished = vouchers.filter(v => v.status === 'created')
+  if (!confirm(`Publish ${unpublished.length} card${unpublished.length === 1 ? '' : 's'} for ${label}? Members will see them on the website, and they can't be deleted after this.`)) return
+  try {
+    await vouchersStore.setStatus(unpublished, 'printed')
+  } catch (e) {
+    alert('Could not publish: ' + e.message)
+  }
+}
+
 const markHandedOut = async (r) => {
   const printed = memberCards(r.email).filter(v => v.status === 'printed')
   try {
@@ -431,7 +451,7 @@ const manualSets = computed(() => {
   const sets = {}
   fyVouchers.value.filter(v => v.source === 'manual').forEach(v => {
     const setKey = v.set?.setId || `reason|${v.reason}`
-    const s = (sets[setKey] ||= { key: setKey, label: v.set?.label || v.reason || 'Issued by hand', vouchers: [], rowMap: {} })
+    const s = (sets[setKey] ||= { key: setKey, label: v.set?.label || v.reason || 'Issued by hand', fromWebsite: v.set?.issuedFrom === 'website', vouchers: [], rowMap: {} })
     s.vouchers.push(v)
     const role = v.set?.role || ''
     const rowKey = `${role}|${v.memberEmail}|${v.type}`
@@ -442,9 +462,9 @@ const manualSets = computed(() => {
     .sort((a, b) => a.label.localeCompare(b.label))
 })
 
-// Only allowed while nothing in the set has been printed
+// Only allowed while nothing in the set has been published
 const deleteSet = async (s) => {
-  if (!confirm(`Delete all ${s.vouchers.length} unprinted vouchers for ${s.label}?`)) return
+  if (!confirm(`Delete all ${s.vouchers.length} unpublished vouchers for ${s.label}?`)) return
   try {
     for (const v of s.vouchers) await vouchersStore.deleteUnprintedVoucher(v.code)
   } catch (e) {
@@ -533,6 +553,7 @@ const exportCsv = () => {
 
 .badge { font-size: 0.68rem; font-weight: 700; padding: 0 0.4rem; border-radius: 999px; }
 .badge-pending { background: #fef3c7; color: #92400e; }
+.badge-web { background: #e0e7ff; color: #3730a3; }
 .badge-none { background: #f3f4f6; color: #6b7280; }
 .dim { color: #9ca3af !important; font-weight: 500; }
 .stat-number { font-size: 1.75rem; font-weight: 800; }
