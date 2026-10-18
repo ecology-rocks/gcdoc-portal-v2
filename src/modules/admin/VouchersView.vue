@@ -132,6 +132,7 @@
               <strong>{{ s.label }}</strong>
               <span v-if="s.fromWebsite" class="badge badge-web">from website</span>
               <span class="small">{{ statusSummary(s.vouchers) }}</span>
+              <RouterLink :to="{ name: 'voucher-print', query: { set: s.key, fy: fyStartYear } }" class="btn-link">🖨️ Print</RouterLink>
               <button v-if="s.vouchers.some(v => v.status === 'created')" class="btn-link" @click="publishCards(s.vouchers, s.label)">
                 ✓ Publish
               </button>

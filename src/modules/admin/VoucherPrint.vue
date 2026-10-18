@@ -6,7 +6,12 @@
         <RouterLink :to="{ name: 'vouchers' }" class="back">&larr; Back to Vouchers</RouterLink>
       </div>
 
-      <div class="filters">
+      <div v-if="setKey" class="set-banner">
+        Printing one set: <strong>{{ setLabel }}</strong> ({{ setCards.length }} cards, any status)
+        <RouterLink :to="{ name: 'voucher-print' }">Show all cards instead</RouterLink>
+      </div>
+
+      <div v-else class="filters">
         <label>
           Fiscal year
           <select v-model.number="fyStartYear">
@@ -48,11 +53,11 @@
           {{ qrReady ? '🖨️ Print' : 'Preparing QR codes...' }}
         </button>
         <button
-          v-if="statusFilter === 'created'"
+          v-if="unpublishedCards.length"
           class="btn-secondary"
-          :disabled="cards.length === 0 || marking"
+          :disabled="marking"
           @click="markPrinted"
-        >✓ Mark these {{ cards.length }} as published</button>
+        >✓ Mark these {{ unpublishedCards.length }} as published</button>
       </div>
       <p class="tip">
         Print on letter-size cardstock at <strong>100% / Actual size</strong> with margins set to <strong>None</strong>,
@@ -93,6 +98,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import QRCode from 'qrcode'
 import { useVouchersStore, VOUCHER_TYPES, voucherUrl, fyLabel } from '@/stores/vouchersStore'
 
@@ -123,7 +129,19 @@ const fiscalYearOptions = computed(() => {
 const OWN_COLUMN_MIN = 5
 const CARDS_PER_COLUMN = CARDS_PER_PAGE / 2
 
+// ?set=<key> (the "Print" link on a hand-issued set in VouchersView): just that set's cards, whatever
+// their status, so a published set can be reprinted too. Keys match VouchersView's manualSets, which are
+// per fiscal year (&fy=) - older sets without a setId are keyed by reason, which can repeat across years.
+const route = useRoute()
+const setKey = computed(() => (route.query.set ? String(route.query.set) : ''))
+const setFy = computed(() => (route.query.fy ? Number(route.query.fy) : null))
+const setCards = computed(() => vouchersStore.vouchers.filter(v =>
+  v.source === 'manual' && (v.set?.setId || `reason|${v.reason}`) === setKey.value &&
+  (setFy.value === null || v.fiscalYear === setFy.value)))
+const setLabel = computed(() => setCards.value[0]?.set?.label || setCards.value[0]?.reason || 'Issued by hand')
+
 const matchingCards = computed(() => {
+  if (setKey.value) return setCards.value
   const term = search.value.trim().toLowerCase()
   return vouchersStore.vouchers
     .filter(v => v.fiscalYear === fyStartYear.value && (type.value === 'all' || v.type === type.value))
@@ -199,12 +217,15 @@ watch(cards, async (list) => {
 
 const printCards = () => window.print()
 
+// Only cards still unpublished - never knock a handed-out or used card back (a set can mix statuses)
+const unpublishedCards = computed(() => cards.value.filter(v => v.status === 'created'))
+
 const marking = ref(false)
 const markPrinted = async () => {
-  if (!confirm(`Mark ${cards.value.length} cards as published? Members will see them on the website, and they can't be deleted after this.`)) return
+  if (!confirm(`Mark ${unpublishedCards.value.length} cards as published? Members will see them on the website, and they can't be deleted after this.`)) return
   marking.value = true
   try {
-    await vouchersStore.setStatus(cards.value, 'printed') // 'printed' = Published
+    await vouchersStore.setStatus(unpublishedCards.value, 'printed') // 'printed' = Published
   } catch (e) {
     alert('Could not mark as published: ' + e.message)
   } finally {
@@ -223,6 +244,8 @@ const markPrinted = async () => {
 .back { color: #4f46e5; font-weight: 600; text-decoration: none; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0; }
+.set-banner { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin: 1rem 0; padding: 0.6rem 0.8rem; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 0.375rem; font-size: 0.9rem; }
+.set-banner a { color: #4f46e5; font-weight: 600; }
 .filters label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; font-weight: 600; color: #4b5563; }
 .filters .grow { flex: 1; min-width: 160px; }
 .filters select, .filters input { padding: 0.45rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.9rem; }
