@@ -824,6 +824,24 @@ add_action('template_redirect', 'gcdoc_voucher_handle_post');
 // Same 3.5in x 2in card as the portal's VoucherPrint.vue. Cards show on screen at real size; "Print"
 // (gcdocPrintVoucherCards) lays the chosen ones out on letter pages, two cut-apart columns of 5.
 
+// The card's QR code as inline SVG. An <img> printed blank on the live site (lazy-load scripts / theme
+// print styles act on images), and inline SVG sidesteps all of that. Decodes the data URI the Netlify
+// functions send and keeps only the svg/path markup the qrcode library produces.
+function gcdoc_voucher_qr_svg($data_uri) {
+    $prefix = 'data:image/svg+xml;base64,';
+    if (strpos((string) $data_uri, $prefix) !== 0) {
+        return '';
+    }
+    $svg = base64_decode(substr($data_uri, strlen($prefix)), true);
+    if ($svg === false) {
+        return '';
+    }
+    return wp_kses($svg, [
+        'svg' => ['xmlns' => true, 'viewbox' => true, 'shape-rendering' => true],
+        'path' => ['fill' => true, 'stroke' => true, 'd' => true],
+    ]);
+}
+
 function gcdoc_voucher_card_html($card) {
     $is_class = ($card['type'] ?? '') === 'class';
     $reason = (string) ($card['reason'] ?? '');
@@ -831,11 +849,7 @@ function gcdoc_voucher_card_html($card) {
     // Print stacks: one per person; write-in cards stack by what they were issued for (e.g. one trial role)
     $group = ($card['memberEmail'] ?? '') ?: ($name !== '' ? $name : 'write-in|' . $reason);
     $meta = (($card['source'] ?? '') === 'manual' ? 'Issued ' : 'Earned ') . ($card['fyLabel'] ?? '') . ($reason !== '' ? ' · ' . $reason : '');
-    // Only our own QR images (data URIs built by the Netlify functions)
-    $qr = (string) ($card['qr'] ?? '');
-    if (strpos($qr, 'data:image/svg+xml;base64,') !== 0) {
-        $qr = '';
-    }
+    $qr = gcdoc_voucher_qr_svg($card['qr'] ?? '');
 
     ob_start();
     ?>
@@ -854,7 +868,7 @@ function gcdoc_voucher_card_html($card) {
             <div class="gcdoc-vcard-fine">Not transferable outside the household · No monetary value</div>
         </div>
         <div class="gcdoc-vcard-qr">
-            <?php if ($qr !== '') : ?><img src="<?php echo esc_attr($qr); ?>" alt=""><?php endif; ?>
+            <?php echo $qr; // sanitized in gcdoc_voucher_qr_svg() ?>
             <div class="gcdoc-vcard-code"><?php echo esc_html($card['code'] ?? ''); ?></div>
         </div>
     </div>
@@ -1972,7 +1986,7 @@ function gcdoc_hours_styles() {
         .gcdoc-vcard-fine { font-size: 6pt; color: #6b7280; }
         .gcdoc-vcard-alt { font-weight: 700; color: #374151; }
         .gcdoc-vcard-qr { width: 0.95in; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .gcdoc-vcard-qr img { width: 0.9in !important; height: 0.9in !important; max-width: none; margin: 0; }
+        .gcdoc-vcard-qr svg { display: block; width: 0.9in !important; height: 0.9in !important; max-width: none; margin: 0; }
         .gcdoc-vcard-code { font-family: 'Courier New', monospace; font-size: 9pt; font-weight: 700; letter-spacing: 0.08em; margin-top: 0.04in; }
         #gcdoc-print-root { display: none; }
         @media print {
