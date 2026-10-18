@@ -1053,13 +1053,17 @@ function gcdoc_voucher_shortcode() {
             <?php endif; ?>
         <?php endif; ?>
 
-        <form method="get" action="<?php echo esc_url($page_url); ?>" class="gcdoc-voucher-lookup">
-            <label>
-                <?php echo $code === '' ? 'Enter a voucher code' : 'Check another code'; ?>
-                <input type="text" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7M2QX">
-            </label>
-            <button type="submit" class="gcdoc-voucher-btn-secondary">Look up</button>
-        </form>
+        <div class="gcdoc-voucher-lookup-box">
+            <h3><?php echo $code === '' ? 'Check a voucher code' : 'Check another code'; ?></h3>
+            <p>Scan the QR code on a voucher card, or type the code printed under it, to see whether it's still valid.</p>
+            <form method="get" action="<?php echo esc_url($page_url); ?>" class="gcdoc-voucher-lookup">
+                <label>
+                    Voucher code
+                    <input type="text" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7M2QX">
+                </label>
+                <button type="submit" class="gcdoc-voucher-btn-secondary">Look up</button>
+            </form>
+        </div>
 
         <?php // Not on a scanned card's page - whoever is scanning wants that card, not their own list ?>
         <?php if ($code === '') : ?>
@@ -1920,7 +1924,8 @@ function gcdoc_hours_styles() {
         .gcdoc-log-message { margin-top: 0.6rem; font-size: 0.9rem; min-height: 1.2em; }
         .gcdoc-log-success { color: #15803d; }
         .gcdoc-log-error { color: #b91c1c; }
-        .gcdoc-voucher { max-width: 460px; }
+        /* Narrow for the scan/lookup parts; the member's voucher list gets the full width for 2 columns of cards */
+        .gcdoc-voucher > *:not(.gcdoc-my-vouchers) { max-width: 460px; }
         .gcdoc-voucher-msg { padding: 0.75rem 1rem; border-radius: 6px; font-weight: 600; border: 2px solid; }
         .gcdoc-voucher-msg-ok { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
         .gcdoc-voucher-msg-bad { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
@@ -1943,10 +1948,16 @@ function gcdoc_hours_styles() {
         .gcdoc-voucher-pin input, .gcdoc-voucher-lookup input { padding: 0.55rem 0.6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem; letter-spacing: 0.08em; }
 
         /* Voucher cards (screen preview + print) - same 3.5in x 2in card as the portal's VoucherPrint.vue */
-        .gcdoc-my-vouchers { margin-top: 2rem; }
+        .gcdoc-voucher-lookup-box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.1rem; margin: 1rem 0; background: #f9fafb; }
+        .gcdoc-voucher-lookup-box h3 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+        .gcdoc-voucher-lookup-box p { margin: 0; font-size: 0.9rem; color: #4b5563; }
+        .gcdoc-voucher-lookup-box .gcdoc-voucher-lookup { margin-top: 0.6rem; }
+        .gcdoc-my-vouchers { margin-top: 2rem; padding-top: 1.25rem; border-top: 2px solid #e5e7eb; }
+        .gcdoc-my-vouchers h3 { margin-top: 0; }
         .gcdoc-vcard-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
         .gcdoc-vcard-tip { font-size: 0.85rem; color: #6b7280; }
-        .gcdoc-vcards { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; }
+        .gcdoc-vcards { display: grid; grid-template-columns: repeat(2, max-content); gap: 0.75rem; margin-top: 0.75rem; }
+        @media (max-width: 760px) { .gcdoc-vcards { grid-template-columns: max-content; } }
         .gcdoc-vcard-item { display: flex; flex-direction: column; gap: 0.25rem; max-width: 100%; }
         .gcdoc-vcard-select { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.35rem; }
         .gcdoc-vcard { box-sizing: border-box; width: 3.5in; max-width: 100%; height: 2in; border: 1px dashed #bbb; padding: 0.14in 0.16in; display: flex; gap: 0.1in; overflow: hidden; background: #fff; color: #111827; font-family: system-ui, -apple-system, sans-serif; line-height: 1.2; text-align: left; }
