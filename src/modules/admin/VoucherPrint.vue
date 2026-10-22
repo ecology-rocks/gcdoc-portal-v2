@@ -11,7 +11,13 @@
         <RouterLink :to="{ name: 'voucher-print' }">Show all cards instead</RouterLink>
       </div>
 
-      <div v-else class="filters">
+      <div v-if="memberFilter" class="set-banner">
+        Printing cards for <strong>{{ memberFilter.size }} selected member{{ memberFilter.size === 1 ? '' : 's' }}</strong>
+        from the Vouchers page; the filters below still apply.
+        <RouterLink :to="{ name: 'voucher-print', query: { fy: fyStartYear } }">Show all members instead</RouterLink>
+      </div>
+
+      <div v-if="!setKey" class="filters">
         <label>
           Fiscal year
           <select v-model.number="fyStartYear">
@@ -31,6 +37,7 @@
           <select v-model="statusFilter">
             <option value="created">Not published yet</option>
             <option value="reprint">Already published (reprint)</option>
+            <option value="unused">All not yet used</option>
           </select>
         </label>
         <label>
@@ -41,14 +48,38 @@
             <option value="manual">Issued by hand</option>
           </select>
         </label>
+        <label>
+          Member type
+          <select v-model="memberType">
+            <option value="">All types</option>
+            <option v-for="t in memberTypeOptions" :key="t" :value="t">{{ t === NO_RECORD ? 'Write-ins / no member record' : t }}</option>
+          </select>
+        </label>
+        <label>
+          Last name
+          <span class="range">
+            <select v-model="letterFrom"><option v-for="l in LETTERS" :key="l" :value="l">{{ l }}</option></select>
+            <span>to</span>
+            <select v-model="letterTo"><option v-for="l in LETTERS" :key="l" :value="l">{{ l }}</option></select>
+          </span>
+        </label>
+        <label>
+          Cards per member
+          <span class="range">
+            <input v-model.number="minCards" type="number" min="1" placeholder="min">
+            <span>to</span>
+            <input v-model.number="maxCards" type="number" min="1" placeholder="max">
+          </span>
+        </label>
         <label class="grow">
           Member
           <input v-model="search" type="search" placeholder="Name, email, or role">
         </label>
+        <button v-if="filtersChanged" type="button" class="btn-link reset" @click="resetFilters">Reset filters</button>
       </div>
 
       <div class="actions">
-        <strong>{{ cards.length }} cards · {{ pages.length }} page{{ pages.length === 1 ? '' : 's' }}</strong>
+        <strong>{{ groups.length }} {{ groups.length === 1 ? 'person' : 'people' }} · {{ cards.length }} cards · {{ pages.length }} page{{ pages.length === 1 ? '' : 's' }}</strong>
         <button class="btn-primary" :disabled="cards.length === 0 || !qrReady" @click="printCards">
           {{ qrReady ? '🖨️ Print' : 'Preparing QR codes...' }}
         </button>
@@ -65,6 +96,8 @@
         column(s); smaller ones share. Blue Ribbon cards have a thick stripe on the left edge.
         After checking the printout, use "Mark as published" so these cards drop off the "Not published yet" list.
         Published cards show on the member's voucher list on the website, and can no longer be deleted.
+        To print the whole membership in batches, narrow by member type or last name (e.g. A to F), print and publish,
+        then move on to the next range.
       </p>
     </div>
 
@@ -84,6 +117,8 @@
               v-if="v.reason"> · {{ v.reason }}</span>
           </div>
           <div v-if="VOUCHER_TYPES[v.type].alt" class="card-fine card-alt">{{ VOUCHER_TYPES[v.type].alt }}</div>
+          <!-- Write-in cards can be claimed on the website (so a lost one can be reprinted) -->
+          <div v-if="!v.memberName" class="card-fine card-claim">Scan to add it to your gcdoc.com account</div>
           <div class="card-fine">Not transferable outside the household · No monetary value</div>
         </div>
         <div class="card-qr">
@@ -101,21 +136,55 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import QRCode from 'qrcode'
 import { useVouchersStore, VOUCHER_TYPES, voucherUrl, fyLabel } from '@/stores/vouchersStore'
+import { useMembersStore } from '@/stores/membersStore'
 
 const CARDS_PER_PAGE = 10
 
 const vouchersStore = useVouchersStore()
+const membersStore = useMembersStore()
 
-onMounted(() => vouchersStore.initVouchers())
+// Members only for the member-type filter
+onMounted(() => Promise.all([vouchersStore.initVouchers(), membersStore.initMembers()]))
+
+const route = useRoute()
 
 const today = new Date()
 const currentFyStart = today.getMonth() >= 9 ? today.getFullYear() : today.getFullYear() - 1
 
-const fyStartYear = ref(currentFyStart - 1)
+// ?fy= from the Vouchers page, so it opens on the year you were looking at
+const fyStartYear = ref(route.query.fy ? Number(route.query.fy) : currentFyStart - 1)
 const type = ref('all')
-const statusFilter = ref('created')
 const sourceFilter = ref('')
 const search = ref('')
+
+// ?members=a@x.com,b@y.com: the rows checked on the Vouchers page. Defaults to every unused card, since
+// they were picked on purpose; the other filters still narrow it.
+const memberFilter = computed(() => route.query.members && !route.query.set
+  ? new Set(String(route.query.members).split(',').map(e => e.trim().toLowerCase()).filter(Boolean))
+  : null)
+const statusFilter = ref(memberFilter.value ? 'unused' : 'created')
+
+// Batching the whole membership: by member type, last-name range, and how many cards each person has
+const NO_RECORD = '(none)'
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+const memberType = ref('')
+const letterFrom = ref('A')
+const letterTo = ref('Z')
+const minCards = ref('')
+const maxCards = ref('')
+
+const filtersChanged = computed(() => type.value !== 'all' || sourceFilter.value || search.value || memberType.value ||
+  letterFrom.value !== 'A' || letterTo.value !== 'Z' || minCards.value !== '' || maxCards.value !== '')
+const resetFilters = () => {
+  type.value = 'all'
+  sourceFilter.value = ''
+  search.value = ''
+  memberType.value = ''
+  letterFrom.value = 'A'
+  letterTo.value = 'Z'
+  minCards.value = ''
+  maxCards.value = ''
+}
 
 const fiscalYearOptions = computed(() => {
   const years = new Set([currentFyStart, currentFyStart - 1])
@@ -132,7 +201,6 @@ const CARDS_PER_COLUMN = CARDS_PER_PAGE / 2
 // ?set=<key> (the "Print" link on a hand-issued set in VouchersView): just that set's cards, whatever
 // their status, so a published set can be reprinted too. Keys match VouchersView's manualSets, which are
 // per fiscal year (&fy=) - older sets without a setId are keyed by reason, which can repeat across years.
-const route = useRoute()
 const setKey = computed(() => (route.query.set ? String(route.query.set) : ''))
 const setFy = computed(() => (route.query.fy ? Number(route.query.fy) : null))
 const setCards = computed(() => vouchersStore.vouchers.filter(v =>
@@ -145,8 +213,13 @@ const matchingCards = computed(() => {
   const term = search.value.trim().toLowerCase()
   return vouchersStore.vouchers
     .filter(v => v.fiscalYear === fyStartYear.value && (type.value === 'all' || v.type === type.value))
-    .filter(v => statusFilter.value === 'created' ? v.status === 'created' : v.status !== 'created')
+    .filter(v => ({
+      created: v.status === 'created',
+      reprint: v.status !== 'created',
+      unused: v.status !== 'used'
+    })[statusFilter.value])
     .filter(v => !sourceFilter.value || v.source === sourceFilter.value)
+    .filter(v => !memberFilter.value || memberFilter.value.has(v.memberEmail))
     .filter(v => !term || v.memberName.toLowerCase().includes(term) || v.memberEmail.includes(term) || (v.reason || "").toLowerCase().includes(term))
 })
 
@@ -156,19 +229,45 @@ const lastFirst = (name) => {
   return `${parts.slice(1).join(' ')} ${parts[0]}`.toLowerCase()
 }
 
-// One group per member, most cards first, then by last name. Within a member: service, then Blue Ribbon.
 const TYPE_ORDER = { class: 0, blue: 1 }
-const groups = computed(() => {
+const allGroups = computed(() => {
   const byMember = {}
   matchingCards.value.forEach(v => {
     // Write-in cards (no person yet) stack by what they were issued for, e.g. one trial role
     const key = v.memberEmail || v.memberName || `write-in|${v.reason}`
-    ;(byMember[key] ||= { name: v.memberName, cards: [] }).cards.push(v)
+    if (!byMember[key]) {
+      const member = v.memberEmail ? membersStore.getMemberByEmail(v.memberEmail) : null
+      byMember[key] = {
+        name: v.memberName,
+        memberType: member?.MembershipType || NO_RECORD,
+        // Write-ins have no name to sort by, so they only show when the range is A to Z
+        letter: lastFirst(v.memberName).trim().charAt(0).toUpperCase(),
+        cards: []
+      }
+    }
+    byMember[key].cards.push(v)
   })
   return Object.values(byMember)
-    .map(g => ({ ...g, cards: g.cards.sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || a.code.localeCompare(b.code)) }))
-    .sort((a, b) => b.cards.length - a.cards.length || lastFirst(a.name).localeCompare(lastFirst(b.name)))
 })
+
+const memberTypeOptions = computed(() => [...new Set(allGroups.value.map(g => g.memberType))]
+  .sort((a, b) => (a === NO_RECORD) - (b === NO_RECORD) || a.localeCompare(b)))
+
+const inLetterRange = (letter) => {
+  if (letterFrom.value === 'A' && letterTo.value === 'Z') return true
+  const [from, to] = [letterFrom.value, letterTo.value].sort()
+  return letter >= from && letter <= to
+}
+
+// One group per member, most cards first, then by last name. Within a member: service, then Blue Ribbon.
+// The batching filters act on whole people, so nobody's stack gets split between batches.
+// (Hidden on a set's page, so they don't apply there.)
+const groups = computed(() => allGroups.value
+  .filter(g => setKey.value || !memberType.value || g.memberType === memberType.value)
+  .filter(g => setKey.value || inLetterRange(g.letter))
+  .filter(g => setKey.value || ((minCards.value === '' || g.cards.length >= minCards.value) && (maxCards.value === '' || g.cards.length <= maxCards.value)))
+  .map(g => ({ ...g, cards: [...g.cards].sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || a.code.localeCompare(b.code)) }))
+  .sort((a, b) => b.cards.length - a.cards.length || lastFirst(a.name).localeCompare(lastFirst(b.name))))
 
 const cards = computed(() => groups.value.flatMap(g => g.cards))
 
@@ -250,6 +349,9 @@ const markPrinted = async () => {
 .filters .grow { flex: 1; min-width: 160px; }
 .filters select, .filters input { padding: 0.45rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.9rem; }
 .req { font-weight: 400; color: #9ca3af; }
+.filters .range { display: flex; align-items: center; gap: 0.3rem; font-weight: 400; }
+.filters .range input { width: 4.5rem; }
+.reset { align-self: flex-end; background: none; border: none; color: #4f46e5; font-weight: 600; cursor: pointer; padding: 0.45rem 0; font-size: 0.85rem; }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 .btn-primary { background: #4f46e5; color: white; border: none; padding: 0.5rem 0.9rem; border-radius: 0.375rem; font-weight: 600; cursor: pointer; }
@@ -305,6 +407,7 @@ const markPrinted = async () => {
 .card-meta { font-size: 7pt; line-height: 1.2; color: #374151; margin-top: auto; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card-fine { font-size: 6pt; color: #6b7280; }
 .card-alt { font-weight: 700; color: #374151; }
+.card-claim { font-weight: 700; color: #111827; }
 
 .card-qr { width: 0.95in; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .card-qr img { width: 0.9in; height: 0.9in; }

@@ -29,6 +29,8 @@ define('GCDOC_DUES_PRODUCT_SLUG', 'membership-dues');
 // sanitize_title() of the dues product's variation attribute name.
 define('GCDOC_DUES_ATTRIBUTE', 'how-much-do-you-owe-plus-paypal-fees');
 define('GCDOC_HOURS_ENTRY_URL', 'https://gcdoc.com/member-hours-entry/');
+// Where members whose dues are pending on a missing waiver go to sign it
+define('GCDOC_WAIVER_URL', 'https://gcdoc.com/waiver-of-liability');
 define('GCDOC_LOGIN_URL', 'https://gcdoc.com/membership-login');
 
 function gcdoc_login_prompt($message) {
@@ -297,8 +299,11 @@ function gcdoc_member_hours_shortcode() {
 
     // Applicant/Lifetime dues are $0, but they still need to "buy" the product to sign the waiver,
     // so paid/unpaid status is driven entirely by the Dues2026Paid flag, same as every other type.
+    $dues_pending = gcdoc_dues_pending_message($report);
     if (!empty($report['dues2026Paid'])) {
         $dues_state_class = 'gcdoc-dues-owed-paid';
+    } elseif ($dues_pending !== '') {
+        $dues_state_class = 'gcdoc-dues-owed-pending';
     } elseif ($dues && !$dues['eligible']) {
         $dues_state_class = 'gcdoc-dues-owed-ineligible';
     } else {
@@ -311,6 +316,8 @@ function gcdoc_member_hours_shortcode() {
                 <h3>Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
                 <?php if (!empty($report['dues2026Paid'])) : ?>
                     <p class="gcdoc-dues-amount">✓ Your 2026 dues are paid. Thank you!</p>
+                <?php elseif ($dues_pending !== '') : ?>
+                    <?php echo gcdoc_dues_pending_html($report); ?>
                 <?php elseif ($voted_in_exempt) : ?>
                     <p class="gcdoc-dues-amount">
                         You were voted in on <?php echo esc_html($report['votedInDate']); ?> (after July 1), so no dues are owed for this cycle.
@@ -327,7 +334,7 @@ function gcdoc_member_hours_shortcode() {
                     </p>
                 <?php endif; ?>
                 <?php echo gcdoc_render_dues_table($membership_type, $current_fy_hours); ?>
-                <?php if (empty($report['dues2026Paid'])) : ?>
+                <?php if (empty($report['dues2026Paid']) && $dues_pending === '') : ?>
                     <p class="gcdoc-dues-pay">
                         <a href="<?php echo esc_url(gcdoc_dues_pay_url($dues)); ?>" class="gcdoc-pay-dues-btn">Pay Your Dues</a>
                         <a href="<?php echo esc_url(GCDOC_HOURS_ENTRY_URL); ?>" class="gcdoc-enter-hours-btn">Enter Missing Hours</a>
@@ -383,6 +390,28 @@ function gcdoc_member_hours_shortcode() {
 }
 add_shortcode('gcdoc_hours', 'gcdoc_member_hours_shortcode');
 
+// Dues marked "pending" in the portal (e.g. check in the mail): what to tell the member, or '' if not
+// pending. Pending members don't get the pay steps, so nobody pays twice while a check is in transit.
+function gcdoc_dues_pending_message($report) {
+    if (!empty($report['dues2026Paid']) || empty($report['dues2026Pending'])) {
+        return '';
+    }
+    $messages = [
+        'check' => 'Your 2026 dues are pending: we\'re waiting for your check to arrive. They\'ll show as paid once it does.',
+        'waiver' => 'Your 2026 dues are pending: we\'re still waiting on your signed waiver.',
+    ];
+    return $messages[$report['dues2026PendingReason'] ?? ''] ?? 'Your 2026 dues are pending. They\'ll show as paid once everything is in.';
+}
+
+// The pending message as HTML, plus a "Sign the Waiver" button when the waiver is what's missing
+function gcdoc_dues_pending_html($report) {
+    $html = '<p class="gcdoc-dues-amount">⏳ ' . esc_html(gcdoc_dues_pending_message($report)) . '</p>';
+    if (($report['dues2026PendingReason'] ?? '') === 'waiver') {
+        $html .= '<p class="gcdoc-dues-pay"><a href="' . esc_url(GCDOC_WAIVER_URL) . '" class="gcdoc-pay-dues-btn">Sign the Waiver</a></p>';
+    }
+    return $html;
+}
+
 // Dues box for the dues page: amount owed plus numbered steps for paying it.
 function gcdoc_dues_owed_shortcode() {
     $report = gcdoc_get_member_report_cached();
@@ -401,6 +430,11 @@ function gcdoc_dues_owed_shortcode() {
 
     if (!empty($report['dues2026Paid'])) {
         return '<p class="gcdoc-dues-owed gcdoc-dues-owed-paid">✓ Your 2026 dues are paid. Thank you!</p>';
+    }
+
+    $pending = gcdoc_dues_pending_message($report);
+    if ($pending !== '') {
+        return '<div class="gcdoc-dues-owed gcdoc-dues-owed-pending">' . gcdoc_dues_pending_html($report) . '</div>';
     }
 
     if (!empty($report['duesExemptVotedIn'])) {
@@ -641,7 +675,8 @@ add_action('wp_ajax_gcdoc_log_hours', 'gcdoc_ajax_log_hours');
 // --- Voucher cards: [gcdoc_voucher], [gcdoc_my_vouchers], [gcdoc_voucher_issue] ---
 // [gcdoc_voucher] is the page every voucher card's QR code opens (https://gcdoc.com/voucher/?code=XXXXXX).
 // Anyone can check whether a code is valid, and a logged-in member also sees their own unused vouchers
-// and can reprint them. Club admins - site Administrators, or anyone who has entered the admin PIN on
+// and can reprint them. Write-in cards (issued with no person) can be claimed by code into the logged-in
+// account, so a lost write-in card can be reprinted like any other. Club admins - site Administrators, or anyone who has entered the admin PIN on
 // this device - can mark vouchers used, and issue trial / instructor / one-off vouchers on the
 // [gcdoc_voucher_issue] page. Vouchers live in the portal's database (netlify voucher-redeem.js,
 // voucher-issue.js, member-vouchers.js).
@@ -700,6 +735,29 @@ function gcdoc_admin_pin_form($label, $code = '') {
     return ob_get_clean();
 }
 
+// "Add to my account" form for a write-in card; posts to gcdoc_voucher_handle_post(). With a $code it's
+// one button (on a looked-up card), without one a code entry box.
+function gcdoc_voucher_claim_form($code) {
+    ob_start();
+    ?>
+    <form method="post" class="gcdoc-voucher-lookup">
+        <?php wp_nonce_field('gcdoc_voucher', '_gcdoc_voucher_nonce'); ?>
+        <input type="hidden" name="gcdoc_voucher_action" value="claim">
+        <?php if ($code !== '') : ?>
+            <input type="hidden" name="code" value="<?php echo esc_attr($code); ?>">
+            <button type="submit" class="gcdoc-voucher-btn-secondary">Add this voucher to my account</button>
+        <?php else : ?>
+            <label>
+                Voucher code
+                <input type="text" name="code" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7M2QX" required>
+            </label>
+            <button type="submit" class="gcdoc-voucher-btn-secondary">Add to my account</button>
+        <?php endif; ?>
+    </form>
+    <?php
+    return ob_get_clean();
+}
+
 // Result banners shared by the voucher pages (?result=...)
 function gcdoc_voucher_result_html($result) {
     $messages = [
@@ -709,6 +767,12 @@ function gcdoc_voucher_result_html($result) {
         'pin_bad' => ['bad', 'That PIN is not correct.'],
         'pin_locked' => ['bad', 'Too many wrong PIN attempts. Please wait 15 minutes and try again.'],
         'not_allowed' => ['bad', 'Only site administrators or someone with the admin PIN can mark vouchers used.'],
+        'claimed' => ['ok', '✓ Voucher added to your account. It\'s in your list below - if the card is ever lost, you can print it again here.'],
+        'claim_already_yours' => ['ok', 'That voucher is already in your account.'],
+        'claim_taken' => ['bad', 'That voucher already belongs to someone else, so it can\'t be added to your account.'],
+        'claim_used' => ['bad', 'That voucher has already been used, so it can\'t be added to your account.'],
+        'claim_not_found' => ['bad', 'No voucher found with that code. Check the code and try again.'],
+        'claim_login' => ['bad', 'Please log in to add a voucher to your account.'],
         'error' => ['bad', 'Something went wrong. Please try again.'],
     ];
     if (!isset($messages[$result])) {
@@ -722,15 +786,16 @@ function gcdoc_voucher_normalize_code($value) {
     return substr(preg_replace('/[^A-Z0-9]/', '', strtoupper((string) $value)), 0, 12);
 }
 
-function gcdoc_voucher_call($code, $action, $redeemed_by = '') {
+// $extra: more request fields, e.g. the claiming account's email/name for 'claim'
+function gcdoc_voucher_call($code, $action, $redeemed_by = '', $extra = []) {
     if (!defined('GCDOC_VOUCHER_ENDPOINT')) {
         return new WP_Error('gcdoc_config', 'GCDOC_VOUCHER_ENDPOINT is not configured in wp-config.php.');
     }
-    return gcdoc_call_report_endpoint(GCDOC_VOUCHER_ENDPOINT, [
+    return gcdoc_call_report_endpoint(GCDOC_VOUCHER_ENDPOINT, array_merge([
         'code' => $code,
         'action' => $action,
         'redeemedBy' => $redeemed_by,
-    ]);
+    ], $extra));
 }
 
 // The other voucher functions sit next to voucher-redeem on the same Netlify site unless configured.
@@ -817,6 +882,36 @@ function gcdoc_voucher_handle_post() {
         wp_safe_redirect(add_query_arg('result', $flag, $back));
         exit;
     }
+
+    if ($action === 'claim') {
+        if (!is_user_logged_in()) {
+            wp_safe_redirect(add_query_arg('result', 'claim_login', $back));
+            exit;
+        }
+        $user = wp_get_current_user();
+        $result = $code === '' ? ['found' => false] : gcdoc_voucher_call($code, 'claim', '', [
+            'email' => sanitize_email($user->user_email),
+            'name' => $user->display_name,
+        ]);
+        if (is_wp_error($result)) {
+            $flag = 'error';
+        } elseif (empty($result['found'])) {
+            $flag = 'claim_not_found';
+        } else {
+            $flag = [
+                'claimed' => 'claimed',
+                'already_yours' => 'claim_already_yours',
+                'taken' => 'claim_taken',
+                'used' => 'claim_used',
+            ][$result['claimResult'] ?? ''] ?? 'error';
+        }
+        // Success: back to the plain page, where the card now shows in the member's own list
+        if (in_array($flag, ['claimed', 'claim_already_yours'], true)) {
+            $back = remove_query_arg('code', $back);
+        }
+        wp_safe_redirect(add_query_arg('result', $flag, $back));
+        exit;
+    }
 }
 add_action('template_redirect', 'gcdoc_voucher_handle_post');
 
@@ -865,6 +960,7 @@ function gcdoc_voucher_card_html($card) {
             <div class="gcdoc-vcard-household">or household</div>
             <div class="gcdoc-vcard-meta"><?php echo esc_html($meta); ?></div>
             <?php if (!$is_class) : ?><div class="gcdoc-vcard-fine gcdoc-vcard-alt">Can also be used for one free class</div><?php endif; ?>
+            <?php if ($name === '') : ?><div class="gcdoc-vcard-fine gcdoc-vcard-claim">Scan to add it to your gcdoc.com account</div><?php endif; ?>
             <div class="gcdoc-vcard-fine">Not transferable outside the household · No monetary value</div>
         </div>
         <div class="gcdoc-vcard-qr">
@@ -1033,7 +1129,9 @@ function gcdoc_voucher_shortcode() {
                     <?php if (!empty($voucher['memberName'])) : ?>
                         <div class="gcdoc-voucher-name"><?php echo esc_html($voucher['memberName']); ?> <span>or household</span></div>
                     <?php else : ?>
+                        <?php // Write-in card nobody has claimed: whoever holds it can use it, as before claiming existed ?>
                         <div class="gcdoc-voucher-name">Name written on card <span>or household</span></div>
+                        <div class="gcdoc-voucher-alt">Write-in card - not linked to an account. Valid as long as it isn't used; no claiming needed.</div>
                     <?php endif; ?>
                     <div class="gcdoc-voucher-meta">
                         <?php echo esc_html($voucher['fyLabel']); ?>
@@ -1051,6 +1149,18 @@ function gcdoc_voucher_shortcode() {
                         </div>
                     <?php else : ?>
                         <div class="gcdoc-voucher-status gcdoc-voucher-valid">✓ VALID - not yet used</div>
+
+                        <?php // Not for club admins: they scan cards to mark them used, and one stray tap would claim the
+                        // card into the admin's own account. An admin claiming their own card uses the code box. ?>
+                        <?php if (!empty($voucher['claimable']) && $redeemer === null) : ?>
+                            <div class="gcdoc-voucher-claim-here">
+                                <?php if (is_user_logged_in()) : ?>
+                                    <?php echo gcdoc_voucher_claim_form($voucher['code']); ?>
+                                <?php else : ?>
+                                    <?php echo gcdoc_login_prompt('Is this your card? Log in to add it to your account, so you can print it again if it\'s lost.'); ?>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
 
                         <?php if ($redeemer !== null) : ?>
                             <form method="post" class="gcdoc-voucher-redeem">
@@ -1081,6 +1191,18 @@ function gcdoc_voucher_shortcode() {
 
         <?php // Not on a scanned card's page - whoever is scanning wants that card, not their own list ?>
         <?php if ($code === '') : ?>
+            <div class="gcdoc-voucher-lookup-box">
+                <h3>Add a voucher to your account</h3>
+                <p>
+                    Got a voucher card without your name printed on it? Enter its code to add it to your account.
+                    It then shows in your voucher list below, and you can print it again if the card is lost.
+                </p>
+                <?php if (is_user_logged_in()) : ?>
+                    <?php echo gcdoc_voucher_claim_form(''); ?>
+                <?php else : ?>
+                    <?php echo gcdoc_login_prompt('Log in to add a voucher to your account.'); ?>
+                <?php endif; ?>
+            </div>
             <?php echo gcdoc_my_vouchers_html(); ?>
         <?php endif; ?>
     </div>
@@ -1911,6 +2033,7 @@ function gcdoc_hours_styles() {
         }
         .gcdoc-dues-owed-unpaid { background: #fffbeb; border-color: #f59e0b; color: #92400e; }
         .gcdoc-dues-owed-paid { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+        .gcdoc-dues-owed-pending { background: #eff6ff; border-color: #3b82f6; color: #1e40af; }
         .gcdoc-dues-owed-ineligible { background: #fef2f2; border-color: #dc2626; color: #b91c1c; }
         .gcdoc-dues-owed-ineligible a { color: #b91c1c; text-decoration: underline; }
         .gcdoc-dues-owed p { margin: 0; }
@@ -1955,6 +2078,8 @@ function gcdoc_hours_styles() {
         .gcdoc-voucher-valid { background: #f0fdf4; color: #15803d; }
         .gcdoc-voucher-used { background: #fef2f2; color: #b91c1c; }
         .gcdoc-voucher-redeem { margin-top: 0.9rem; }
+        .gcdoc-voucher-claim-here { margin-top: 0.9rem; padding-top: 0.75rem; border-top: 1px dashed #d1d5db; }
+        .gcdoc-voucher-claim-here .gcdoc-voucher-lookup { margin-top: 0; }
         .gcdoc-voucher-btn { width: 100%; padding: 0.9rem; font-size: 1.15rem; font-weight: 800; background: #16a34a; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
         .gcdoc-voucher-btn-secondary { padding: 0.55rem 1rem; font-weight: 700; background: #fff; color: #1f2937; border: 2px solid #1f2937; border-radius: 6px; cursor: pointer; }
         .gcdoc-voucher-pin, .gcdoc-voucher-lookup { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
@@ -1984,6 +2109,7 @@ function gcdoc_hours_styles() {
         .gcdoc-vcard-household { font-size: 7.5pt; color: #374151; }
         .gcdoc-vcard-meta { font-size: 7pt; line-height: 1.2; color: #374151; margin-top: auto; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         .gcdoc-vcard-fine { font-size: 6pt; color: #6b7280; }
+        .gcdoc-vcard-claim { font-weight: 700; color: #111827; }
         .gcdoc-vcard-alt { font-weight: 700; color: #374151; }
         .gcdoc-vcard-qr { width: 0.95in; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .gcdoc-vcard-qr svg { display: block; width: 0.9in !important; height: 0.9in !important; max-width: none; margin: 0; }

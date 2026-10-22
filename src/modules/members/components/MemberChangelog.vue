@@ -40,7 +40,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
-import { useMembersStore } from '@/stores/membersStore'
+import { useMembersStore, DUES_PENDING_REASONS } from '@/stores/membersStore'
 
 const props = defineProps(['memberEmail'])
 
@@ -93,6 +93,10 @@ const describe = (entry) => {
       return { icon: '💵', text: `${entry.duesYear} dues marked paid` }
     case 'dues_payment_reversed':
       return { icon: '↩️', text: `${entry.duesYear} dues marked unpaid` }
+    case 'dues_pending':
+      return { icon: '⏳', text: `${entry.duesYear} dues pending: ${entry.reason === 'other' ? 'other' : DUES_PENDING_REASONS[entry.reason] || entry.reason}`, detail: entry.note }
+    case 'dues_pending_cleared':
+      return { icon: '↩️', text: `${entry.duesYear} dues no longer pending (marked not paid)` }
     case 'applicant_step':
       return entry.done
         ? { icon: '✅', text: `Applicant: ${entry.label}` }

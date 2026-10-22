@@ -96,6 +96,9 @@ import { useVouchersStore, fyLabel, fiscalYearOfDate, instructorLogDate } from '
 import MemberSelect from '@/components/admin/MemberSelect.vue'
 import { INSTRUCTOR_SESSION_WEEKS, INSTRUCTOR_MIN_WEEKS, INSTRUCTOR_HOURS_PER_WEEK } from '@/utils/vouchers'
 
+// 'issued' after a successful issue, so a surrounding modal can close
+const emit = defineEmits(['issued'])
+
 const membersStore = useMembersStore()
 const vouchersStore = useVouchersStore()
 
@@ -257,6 +260,7 @@ const issue = async () => {
     rows.value = []
     sessionName.value = ''
     sessionDate.value = ''
+    emit('issued')
   } catch (e) {
     alert('Could not issue: ' + e.message)
   } finally {

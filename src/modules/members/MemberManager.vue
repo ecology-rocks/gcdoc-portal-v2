@@ -1,7 +1,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
-import { useMembersStore, APPLICANT_CHECKLIST } from '@/stores/membersStore'
+import { useMembersStore, APPLICANT_CHECKLIST, duesStatus } from '@/stores/membersStore'
+import DuesStatusBadge from '@/components/admin/DuesStatusBadge.vue'
 import { useLogsStore } from '@/stores/logsStore'
 import { todayLocalIso } from '@/utils/dates'
 import {
@@ -17,7 +18,8 @@ const route = useRoute()
 const search = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const selectedType = ref('')
 const selectedJoinYear = ref('')
-const unpaidDuesOnly = ref(false)
+// '' all | 'unpaid' not paid and not pending | 'pending' | 'notpaid' unpaid + pending | 'paid'
+const duesFilter = ref('')
 const showInactive = ref(false)
 const minHours = ref('')
 const maxHours = ref('')
@@ -178,8 +180,10 @@ const filteredMembers = computed(() => {
         )
     }
 
-    if (unpaidDuesOnly.value) {
-        list = list.filter(m => !m.Dues2026Paid)
+    if (duesFilter.value === 'notpaid') {
+        list = list.filter(m => duesStatus(m) !== 'paid')
+    } else if (duesFilter.value) {
+        list = list.filter(m => duesStatus(m) === duesFilter.value)
     }
 
     if (minHours.value !== '' && minHours.value !== null) {
@@ -208,19 +212,11 @@ const getFYHours = (email) => {
 // Reflects whatever filters are currently applied, so this doubles as a quick report
 // (e.g. filter to Regular members, or search a name, and the counts update to match).
 const duesSummary = computed(() => {
-    const paid = filteredMembers.value.filter(m => m.Dues2026Paid).length
+    const paid = filteredMembers.value.filter(m => duesStatus(m) === 'paid').length
+    const pending = filteredMembers.value.filter(m => duesStatus(m) === 'pending').length
     const total = filteredMembers.value.length
-    return { paid, outstanding: total - paid, total }
+    return { paid, pending, outstanding: total - paid - pending, total }
 })
-
-const toggleDuesPaid = async (member) => {
-  try {
-    await store.setDuesPaid(member.Email, !member.Dues2026Paid)
-  } catch (err) {
-    console.error('Failed to update dues status', err)
-    alert('Failed to update dues status.')
-  }
-}
 
 // Saves immediately; the live member listener updates the checkbox afterward
 const savingStep = ref(null)
@@ -330,6 +326,23 @@ const copyEmail = async (email) => {
     console.error('Failed to copy', err)
   }
 }
+
+// Every email in the current filtered list, comma-separated for pasting into a To/BCC line
+const shownEmails = computed(() => [...new Set(
+  filteredMembers.value.map(m => (m.Email || '').trim().toLowerCase()).filter(e => e.includes('@'))
+)])
+const copiedAll = ref(false)
+const copyAllEmails = async () => {
+  if (!shownEmails.value.length) return
+  try {
+    await navigator.clipboard.writeText(shownEmails.value.join(', '))
+    copiedAll.value = true
+    setTimeout(() => { copiedAll.value = false }, 2000)
+  } catch (err) {
+    console.error('Failed to copy', err)
+    alert('Could not copy to the clipboard.')
+  }
+}
 </script>
 
 <template>
@@ -357,10 +370,13 @@ const copyEmail = async (email) => {
                         <span>&ndash;</span>
                         <input type="number" v-model="maxHours" placeholder="Max hrs" class="hours-input">
                     </div>
-                    <label class="dues-filter">
-                        <input type="checkbox" v-model="unpaidDuesOnly">
-                        2026 Dues Unpaid Only
-                    </label>
+                    <select v-model="duesFilter" class="filter-select">
+                        <option value="">All dues statuses</option>
+                        <option value="unpaid">2026 Dues: Not paid</option>
+                        <option value="pending">2026 Dues: Pending</option>
+                        <option value="notpaid">2026 Dues: Not paid + pending</option>
+                        <option value="paid">2026 Dues: Paid</option>
+                    </select>
                     <label class="dues-filter">
                         <input type="checkbox" v-model="showInactive">
                         Show Inactive
@@ -378,13 +394,25 @@ const copyEmail = async (email) => {
                 <span class="dues-stat-label">Paid</span>
             </div>
             <div class="dues-stat">
+                <span class="dues-stat-value dues-stat-pending">{{ duesSummary.pending }}</span>
+                <span class="dues-stat-label">Pending</span>
+            </div>
+            <div class="dues-stat">
                 <span class="dues-stat-value dues-stat-outstanding">{{ duesSummary.outstanding }}</span>
-                <span class="dues-stat-label">Outstanding</span>
+                <span class="dues-stat-label">Not Paid</span>
             </div>
             <div class="dues-stat">
                 <span class="dues-stat-value">{{ duesSummary.total }}</span>
-                <span class="dues-stat-label">Total{{ (search || selectedType || selectedJoinYear !== '' || unpaidDuesOnly || minHours !== '' || maxHours !== '') ? ' (filtered)' : '' }}</span>
+                <span class="dues-stat-label">Total{{ (search || selectedType || selectedJoinYear !== '' || duesFilter || minHours !== '' || maxHours !== '') ? ' (filtered)' : '' }}</span>
             </div>
+            <button
+              @click="copyAllEmails"
+              class="btn-copy-all"
+              :disabled="!shownEmails.length"
+              title="Copy the email addresses of every member shown below, for a To/BCC line"
+            >
+                {{ copiedAll ? '✓ Copied!' : `📋 Copy ${shownEmails.length} email${shownEmails.length === 1 ? '' : 's'}` }}
+            </button>
         </div>
 
         <div class="members-grid">
@@ -409,13 +437,7 @@ const copyEmail = async (email) => {
                     <div class="hours-text">Last Year FY Hours: <strong>{{ getLastYearFYHours(m.Email) }}</strong></div>
                     <div v-if="joinYearOf(m)" class="secondary-text">Joined: {{ joinYearOf(m) }}</div>
                     <div v-if="m.VotedInDate" class="secondary-text">Voted In: {{ m.VotedInDate }}</div>
-                    <button
-                        @click="toggleDuesPaid(m)"
-                        class="dues-badge"
-                        :class="m.Dues2026Paid ? 'dues-paid' : 'dues-unpaid'"
-                    >
-                        2026 Dues: {{ m.Dues2026Paid ? 'Paid' : 'Not Paid' }}
-                    </button>
+                    <DuesStatusBadge :member="m" class="dues-control" />
                     <div v-if="m.MembershipType === 'Applicant'" class="applicant-steps">
                         <label v-for="item in APPLICANT_CHECKLIST" :key="item.field" class="step-check">
                             <input
@@ -756,29 +778,6 @@ const copyEmail = async (email) => {
 
 .step-check input { cursor: pointer; }
 
-.dues-badge {
-  margin-top: 0.5rem;
-  display: inline-block;
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.dues-paid {
-  background-color: #f0fdf4;
-  border-color: #bbf7d0;
-  color: #15803d;
-}
-
-.dues-unpaid {
-  background-color: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
 .dues-summary-bar {
   display: flex;
   gap: 1.5rem;
@@ -802,8 +801,23 @@ const copyEmail = async (email) => {
   color: #111827;
 }
 
+.btn-copy-all {
+  align-self: center;
+  border: 1px solid #cbd5e1;
+  background: white;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-copy-all:hover:not(:disabled) { background: #f3f4f6; }
+.btn-copy-all:disabled { color: #9ca3af; cursor: not-allowed; }
+
 .dues-stat-paid { color: #15803d; }
 .dues-stat-outstanding { color: #b91c1c; }
+.dues-stat-pending { color: #b45309; }
+.dues-control { margin-top: 0.5rem; }
 
 .dues-stat-label {
   font-size: 0.75rem;

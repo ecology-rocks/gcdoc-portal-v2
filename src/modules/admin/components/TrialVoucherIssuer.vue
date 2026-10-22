@@ -76,6 +76,8 @@ import { useVouchersStore, fyLabel } from '@/stores/vouchersStore'
 import MemberSelect from '@/components/admin/MemberSelect.vue'
 
 const props = defineProps({ fiscalYearOptions: { type: Array, required: true }, defaultFiscalYear: { type: Number, required: true } })
+// 'issued' after a successful issue, so a surrounding modal can close
+const emit = defineEmits(['issued'])
 
 // Vouchers per trial day, by role. Editable on the form; these are just the starting points.
 const STANDARD_TRIAL_ROLES = [
@@ -167,6 +169,7 @@ const issue = async () => {
     trialDates.value = ''
     days.value = 1
     roles.value = []
+    emit('issued')
   } catch (e) {
     alert('Could not issue vouchers: ' + e.message)
   } finally {

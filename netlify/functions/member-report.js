@@ -69,6 +69,10 @@ export async function handler(event) {
     const membershipType = memberData.MembershipType || ''
     const voucherStatus = voucherEligibility(membershipType)
     const dues2026Paid = Boolean(memberData.Dues2026Paid)
+    // Pending = nearly done (e.g. check in the mail). Only the reason category goes to the website,
+    // never the admin's free-text note.
+    const dues2026Pending = !dues2026Paid && Boolean(memberData.Dues2026Pending)
+    const dues2026PendingReason = dues2026Pending ? memberData.Dues2026PendingReason || 'other' : ''
 
     const logs = snap.docs
       .map((d) => {
@@ -143,6 +147,8 @@ export async function handler(event) {
         duesFiscalYear: duesFy?.label || '',
         duesFiscalYearHours: duesFy?.hours || 0,
         dues2026Paid,
+        dues2026Pending,
+        dues2026PendingReason,
         votedInDate: memberData.VotedInDate || '',
         duesExemptVotedIn,
         totalHours: Math.round(totalHours * 100) / 100,

@@ -6,7 +6,25 @@ import { collection, onSnapshot, doc, setDoc, getDoc, writeBatch, getDocs, query
 const normalizeEmail = (value) => (value || '').trim().toLowerCase()
 
 // The dues cycle tracked by the Dues2026Paid / Dues2026PaidAt fields
-const DUES_YEAR = 2026
+export const DUES_YEAR = 2026
+
+// Dues status: 'paid' | 'pending' | 'unpaid'. Dues2026Paid stays the paid flag (the WP plugin, voting
+// and exports read it); pending is its own flag (Dues2026Pending + Reason/Note/At) for someone who is
+// nearly done - e.g. their check is in the mail, or they paid but haven't signed the waiver. Pending
+// still counts as not paid, including for voting.
+export const DUES_PENDING_REASONS = {
+  waiver: 'Waiver missing',
+  check: 'Check in the mail',
+  other: 'Other'
+}
+
+export const duesStatus = (m) => (m.Dues2026Paid ? 'paid' : m.Dues2026Pending ? 'pending' : 'unpaid')
+
+// "Pending (check in the mail)", or the note for 'other'
+export const duesPendingText = (m) => {
+  if (m.Dues2026PendingReason === 'other') return m.Dues2026PendingNote || 'Other'
+  return DUES_PENDING_REASONS[m.Dues2026PendingReason] || ''
+}
 
 // Applicant progress checkboxes, stored as booleans on the member doc. `short` is the printable's
 // column header.
@@ -29,6 +47,8 @@ export const isEligibleToVote = (m) =>
 //   status_change          { from, to, note }
 //   dues_payment           { duesYear }
 //   dues_payment_reversed  { duesYear }
+//   dues_pending           { duesYear, reason, note }
+//   dues_pending_cleared   { duesYear }   (pending -> not paid; pending -> paid logs dues_payment)
 //   email_change           { from, to }
 //   applicant_step         { field, label, done }
 //   note                   { text }
@@ -158,16 +178,38 @@ export const useMembersStore = defineStore('members', {
     },
 
     async setDuesPaid(emailId, paid) {
+      return this.setDuesStatus(emailId, paid ? 'paid' : 'unpaid')
+    },
+
+    // status: 'paid' | 'pending' | 'unpaid'. For pending, reason is a DUES_PENDING_REASONS key and
+    // note is free text (used for 'other'). Paid and pending are never both set.
+    async setDuesStatus(emailId, status, { reason = '', note = '' } = {}) {
+      if (!['paid', 'pending', 'unpaid'].includes(status)) throw new Error(`Unknown dues status: ${status}`)
+      if (status === 'pending' && !DUES_PENDING_REASONS[reason]) throw new Error(`Unknown pending reason: ${reason}`)
+
       const existingMember = this.getMemberByEmail(emailId)
       const resolvedDocId = normalizeEmail(existingMember?.id || emailId)
       const docRef = doc(db, 'members', resolvedDocId)
+      const before = existingMember ? duesStatus(existingMember) : 'unpaid'
+      const now = Timestamp.now()
 
       const batch = writeBatch(db)
       batch.update(docRef, {
-        Dues2026Paid: paid,
-        Dues2026PaidAt: paid ? Timestamp.now() : null
+        Dues2026Paid: status === 'paid',
+        // Keep the original paid date if it was already paid
+        Dues2026PaidAt: status === 'paid' ? (before === 'paid' ? existingMember.Dues2026PaidAt || now : now) : null,
+        Dues2026Pending: status === 'pending',
+        Dues2026PendingReason: status === 'pending' ? reason : null,
+        Dues2026PendingNote: status === 'pending' ? note.trim() : null,
+        Dues2026PendingAt: status === 'pending' ? now : null
       })
-      addChangelogToBatch(batch, resolvedDocId, paid ? 'dues_payment' : 'dues_payment_reversed', { duesYear: DUES_YEAR })
+
+      const log = (type, fields = {}) => addChangelogToBatch(batch, resolvedDocId, type, { duesYear: DUES_YEAR, ...fields })
+      if (before === 'paid' && status !== 'paid') log('dues_payment_reversed')
+      if (status === 'paid' && before !== 'paid') log('dues_payment')
+      // Logged for a change of reason too, e.g. waiver missing -> check in the mail
+      if (status === 'pending') log('dues_pending', { reason, note: note.trim() })
+      if (before === 'pending' && status === 'unpaid') log('dues_pending_cleared')
       await batch.commit()
     },
 
@@ -397,6 +439,7 @@ export const useMembersStore = defineStore('members', {
         Breeds: m.Breeds,
         // Export-only (importGenericRows ignores these) - used to build MailPoet reminder lists
         Dues2026Paid: m.Dues2026Paid ? 'Yes' : 'No',
+        Dues2026Status: { paid: 'Paid', pending: `Pending - ${duesPendingText(m)}`, unpaid: 'Not paid' }[duesStatus(m)],
         Dues2026PaidAt: m.Dues2026PaidAt?.toDate ? m.Dues2026PaidAt.toDate().toISOString().split('T')[0] : ''
       }))
     }

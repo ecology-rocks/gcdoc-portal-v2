@@ -71,6 +71,8 @@ import { useVouchersStore, fyLabel } from '@/stores/vouchersStore'
 import MemberSelect from '@/components/admin/MemberSelect.vue'
 
 const props = defineProps({ fiscalYearOptions: { type: Array, required: true }, defaultFiscalYear: { type: Number, required: true } })
+// 'issued' after a successful issue, so a surrounding modal can close
+const emit = defineEmits(['issued'])
 
 // Picking a preset reason sets its voucher type and count. Board members who attend at least
 // 2/3 of the year's meetings get 5 Blue Ribbon vouchers, once a year.
@@ -155,6 +157,7 @@ const issue = async () => {
     alert(`Issued ${n} vouchers for "${label}". Print them from "Print cards" (Issued by hand).`)
     reason.value = ''
     rows.value = [makeRow()]
+    emit('issued')
   } catch (e) {
     alert('Could not issue vouchers: ' + e.message)
   } finally {

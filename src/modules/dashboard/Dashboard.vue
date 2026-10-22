@@ -46,15 +46,7 @@
             <div class="member-stats">
               <span>This FY: <strong>{{ fyHours(m, logsStore.fiscalYearHours) }} hrs</strong></span>
               <span>Last FY: <strong>{{ fyHours(m, logsStore.lastFiscalYearHours) }} hrs</strong></span>
-              <button
-                class="dues-badge"
-                :class="m.Dues2026Paid ? 'dues-paid' : 'dues-unpaid'"
-                :disabled="savingDues === m.Email"
-                :title="m.Dues2026Paid ? 'Tap to mark not paid' : 'Tap to mark paid'"
-                @click="toggleDuesPaid(m)"
-              >
-                2026 Dues: {{ m.Dues2026Paid ? 'Paid' : 'Not Paid' }}
-              </button>
+              <DuesStatusBadge :member="m" />
             </div>
 
             <div class="contact-list">
@@ -94,6 +86,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useLogsStore } from '@/stores/logsStore'
 import { useSheetsStore } from '@/stores/sheetsStore'
+import DuesStatusBadge from '@/components/admin/DuesStatusBadge.vue'
 import MemberLogWizard from '@/modules/memberlogs/components/MemberLogWizard.vue'
 import PersonalLogHistory from '@/modules/memberlogs/components/PersonalLogHistory.vue'
 
@@ -108,7 +101,6 @@ const search = ref('')
 const uploading = ref(false)
 const uploadedSheet = ref(null)
 const uploadError = ref('')
-const savingDues = ref('')
 
 onMounted(async () => {
   await authStore.ensureProfileLoaded()
@@ -158,18 +150,6 @@ const allMatches = computed(() => {
 
 const matches = computed(() => allMatches.value.slice(0, MAX_RESULTS))
 const moreCount = computed(() => Math.max(0, allMatches.value.length - MAX_RESULTS))
-
-const toggleDuesPaid = async (m) => {
-  savingDues.value = m.Email
-  try {
-    await membersStore.setDuesPaid(m.Email, !m.Dues2026Paid)
-  } catch (err) {
-    console.error('Failed to update dues status', err)
-    alert('Failed to update dues status.')
-  } finally {
-    savingDues.value = ''
-  }
-}
 
 const uploadSheet = async (event) => {
   const file = event.target.files[0]
@@ -306,17 +286,6 @@ const uploadSheet = async (event) => {
   font-size: 0.9rem;
   color: #374151;
 }
-.dues-badge {
-  border: 1px solid transparent;
-  border-radius: 0.375rem;
-  padding: 0.1rem 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.dues-badge:disabled { opacity: 0.6; cursor: wait; }
-.dues-paid { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-.dues-unpaid { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
 .contact-list {
   display: flex;
