@@ -81,6 +81,13 @@
       <div class="actions">
         <strong>{{ groups.length }} {{ groups.length === 1 ? 'person' : 'people' }} · {{ cards.length }} cards · {{ pages.length }} page{{ pages.length === 1 ? '' : 's' }}</strong>
         <label class="layout-select">
+          Order
+          <select v-model="order">
+            <option value="cards">Most cards first</option>
+            <option value="name">Last name A-Z</option>
+          </select>
+        </label>
+        <label class="layout-select">
           Layout
           <select v-model="layout">
             <option value="stacks">Stacks by person</option>
@@ -240,6 +247,11 @@ const lastFirst = (name) => {
 }
 
 const TYPE_ORDER = { class: 0, blue: 1 }
+
+// People order: 'cards' (most cards first - packs stacks best) or 'name' (last name A-Z). Remembered per browser.
+const ORDER_KEY = 'gcdoc.voucherPrintOrder'
+const order = ref((() => { try { return localStorage.getItem(ORDER_KEY) === 'name' ? 'name' : 'cards' } catch { return 'cards' } })())
+watch(order, (value) => { try { localStorage.setItem(ORDER_KEY, value) } catch { /* private mode etc. */ } })
 const allGroups = computed(() => {
   const byMember = {}
   matchingCards.value.forEach(v => {
@@ -277,7 +289,10 @@ const groups = computed(() => allGroups.value
   .filter(g => setKey.value || inLetterRange(g.letter))
   .filter(g => setKey.value || ((minCards.value === '' || g.cards.length >= minCards.value) && (maxCards.value === '' || g.cards.length <= maxCards.value)))
   .map(g => ({ ...g, cards: [...g.cards].sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || a.code.localeCompare(b.code)) }))
-  .sort((a, b) => b.cards.length - a.cards.length || lastFirst(a.name).localeCompare(lastFirst(b.name))))
+  .sort((a, b) => order.value === 'name'
+    // Write-ins (no name yet) go last
+    ? (!a.name - !b.name) || lastFirst(a.name).localeCompare(lastFirst(b.name))
+    : b.cards.length - a.cards.length || lastFirst(a.name).localeCompare(lastFirst(b.name))))
 
 const cards = computed(() => groups.value.flatMap(g => g.cards))
 
