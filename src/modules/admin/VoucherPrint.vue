@@ -80,6 +80,13 @@
 
       <div class="actions">
         <strong>{{ groups.length }} {{ groups.length === 1 ? 'person' : 'people' }} · {{ cards.length }} cards · {{ pages.length }} page{{ pages.length === 1 ? '' : 's' }}</strong>
+        <label class="layout-select">
+          Layout
+          <select v-model="layout">
+            <option value="stacks">Stacks by person</option>
+            <option value="compact">Compact (10 per page)</option>
+          </select>
+        </label>
         <button class="btn-primary" :disabled="cards.length === 0 || !qrReady" @click="printCards">
           {{ qrReady ? '🖨️ Print' : 'Preparing QR codes...' }}
         </button>
@@ -92,8 +99,11 @@
       </div>
       <p class="tip">
         Print on letter-size cardstock at <strong>100% / Actual size</strong> with margins set to <strong>None</strong>,
-        then cut along the dashed lines. Each column is one stack: members with {{ OWN_COLUMN_MIN }}+ vouchers get their own
-        column(s); smaller ones share. Blue Ribbon cards have a thick stripe on the left edge.
+        then cut along the dashed lines.
+        <template v-if="layout === 'stacks'">Each column is one stack: members with {{ OWN_COLUMN_MIN }}+ vouchers get their own
+        column(s); smaller ones share.</template>
+        <template v-else>Compact fills every page with 10 cards, so one person's cards can run across columns and pages - sort them after cutting.</template>
+        Blue Ribbon cards have a thick stripe on the left edge.
         After checking the printout, use "Mark as published" so these cards drop off the "Not published yet" list.
         Published cards show on the member's voucher list on the website, and can no longer be deleted.
         To print the whole membership in batches, narrow by member type or last name (e.g. A to F), print and publish,
@@ -271,15 +281,24 @@ const groups = computed(() => allGroups.value
 
 const cards = computed(() => groups.value.flatMap(g => g.cards))
 
+// 'stacks' (one cut stack per person) or 'compact' (every page full, saves cardstock). Remembered per browser.
+const LAYOUT_KEY = 'gcdoc.voucherPrintLayout'
+const readLayout = () => { try { return localStorage.getItem(LAYOUT_KEY) === 'compact' ? 'compact' : 'stacks' } catch { return 'stacks' } }
+const layout = ref(readLayout())
+watch(layout, (value) => { try { localStorage.setItem(LAYOUT_KEY, value) } catch { /* private mode etc. */ } })
+
 // Lay groups into 5-card columns, then pair columns into pages.
-// 5+ cards: start a fresh column and fill as many as needed (15 cards = 3 columns = 1.5 pages).
-// 1-4 cards: share columns, but never split one member across two columns.
+// Stacks: 5+ cards start a fresh column and fill as many as needed (15 cards = 3 columns = 1.5 pages);
+// 1-4 cards share columns, but never split one member across two columns.
+// Compact: the same card order, just poured into columns of 5 with no gaps.
 const pages = computed(() => {
   const columns = []
   let column = []
   const closeColumn = () => { if (column.length) { columns.push(column); column = [] } }
 
-  groups.value.forEach(g => {
+  if (layout.value === 'compact') {
+    for (let i = 0; i < cards.value.length; i += CARDS_PER_COLUMN) columns.push(cards.value.slice(i, i + CARDS_PER_COLUMN))
+  } else groups.value.forEach(g => {
     if (g.cards.length >= OWN_COLUMN_MIN) {
       closeColumn()
       for (let i = 0; i < g.cards.length; i += CARDS_PER_COLUMN) {
@@ -351,6 +370,8 @@ const markPrinted = async () => {
 .req { font-weight: 400; color: #9ca3af; }
 .filters .range { display: flex; align-items: center; gap: 0.3rem; font-weight: 400; }
 .filters .range input { width: 4.5rem; }
+.layout-select { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 600; color: #4b5563; }
+.layout-select select { padding: 0.4rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.85rem; }
 .reset { align-self: flex-end; background: none; border: none; color: #4f46e5; font-weight: 600; cursor: pointer; padding: 0.45rem 0; font-size: 0.85rem; }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
