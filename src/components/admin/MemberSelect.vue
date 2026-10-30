@@ -63,6 +63,8 @@ const filteredMembers = computed(() => {
   const q = searchQuery.value.toLowerCase()
   
   return store.members
+    // Inactive members can't be assigned new hours/vouchers (already-selected ones still display)
+    .filter(m => m.MembershipType !== 'Inactive')
     .filter(m => {
       const full = `${m.LastName}, ${m.FirstName}`.toLowerCase()
       const reverse = `${m.FirstName} ${m.LastName}`.toLowerCase()
