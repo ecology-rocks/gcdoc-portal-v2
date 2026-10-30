@@ -367,6 +367,7 @@ function gcdoc_member_hours_shortcode() {
                                     <th>Activity</th>
                                     <th>Type</th>
                                     <th>Hours</th>
+                                    <th>Sheet</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -376,6 +377,7 @@ function gcdoc_member_hours_shortcode() {
                                         <td><?php echo esc_html($log['activity']); ?></td>
                                         <td><?php echo esc_html($log['type']); ?></td>
                                         <td><?php echo esc_html($log['hours']); ?></td>
+                                        <td><?php if (!empty($log['sheetUrl'])) : ?><a href="<?php echo esc_url($log['sheetUrl']); ?>" target="_blank" rel="noopener">View</a><?php endif; ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

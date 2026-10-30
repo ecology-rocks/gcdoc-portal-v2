@@ -37,6 +37,25 @@ function voucherEligibility(membershipType) {
   return 'none'
 }
 
+// Logs entered from a paper sign-in sheet carry the sheet's shortId in SourceSheet; map those to the
+// scanned image so members can see the sheet. FY26+ codes (e.g. 26-4821) are unique, but older plain
+// 4-digit codes can repeat - if two sheets share one we skip it rather than risk linking the wrong sheet.
+async function getSheetUrls(db, sourceSheets) {
+  const ids = [...new Set(sourceSheets.map((v) => String(v || '').trim()).filter(Boolean))]
+  const counts = new Map()
+  const urls = new Map()
+  for (let i = 0; i < ids.length; i += 30) { // Firestore 'in' takes at most 30 values
+    const snap = await db.collection('sheets').where('shortId', 'in', ids.slice(i, i + 30)).get()
+    for (const doc of snap.docs) {
+      const { shortId, imageUrl } = doc.data()
+      counts.set(shortId, (counts.get(shortId) || 0) + 1)
+      if (imageUrl) urls.set(shortId, imageUrl)
+    }
+  }
+  for (const [shortId, n] of counts) if (n > 1) urls.delete(shortId)
+  return urls
+}
+
 export async function handler(event) {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
@@ -74,6 +93,8 @@ export async function handler(event) {
     const dues2026Pending = !dues2026Paid && Boolean(memberData.Dues2026Pending)
     const dues2026PendingReason = dues2026Pending ? memberData.Dues2026PendingReason || 'other' : ''
 
+    const sheetUrls = await getSheetUrls(db, snap.docs.map((d) => d.data().SourceSheet))
+
     const logs = snap.docs
       .map((d) => {
         const data = d.data()
@@ -82,7 +103,8 @@ export async function handler(event) {
           date: date.toISOString(),
           activity: data.Activity || '',
           type: data.type || '',
-          hours: Number(data.Hours) || 0
+          hours: Number(data.Hours) || 0,
+          sheetUrl: sheetUrls.get(String(data.SourceSheet || '')) || ''
         }
       })
       .sort((a, b) => new Date(b.date) - new Date(a.date))

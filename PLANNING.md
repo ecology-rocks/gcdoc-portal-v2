@@ -10,7 +10,7 @@ Roadmap ordered by dependency (each phase simplifies the next), not by original 
 Classes/Registration module fully removed (`classStore.js`, `ClassDashboard.vue`, `RegistrarView.vue`, dead nav links). Member-dogs feature (`DogManager.vue`, `DogModal.vue`, `dogStore.js`, Dogs import/export tab) also sunset and removed 2026-10-12; existing `dogs` Firestore docs and rule left in place, unused. Member portal accounts sunset — only admin (`reallyjustsam@gmail.com`) and the `kiosk@gcdoc.com` terminal have accounts now; email-link sign-in and registrar/teacher roles removed from `authStore.js` and `Login.vue`.
 
 ### Phase 2 — Hours tracker in the WordPress plugin ✅
-`netlify/functions/member-log-submit.js` + `[gcdoc_log_hours]` shortcode let members self-log hours from WordPress, landing in the existing approval queue with `SourceSheet: "wp-plugin"`.
+`netlify/functions/member-log-submit.js` + `[gcdoc_log_hours]` shortcode let members self-log hours from WordPress, landing in the existing approval queue with `SourceSheet: "wp-plugin"`. **Sheet links (2026-10-30)**: `[gcdoc_hours]` log tables gained a "Sheet" column linking to the scanned sign-in sheet; `member-report.js` maps each log's `SourceSheet` (sheet `shortId`) to the sheet's `imageUrl`, skipping any shortId shared by more than one sheet.
 
 ### Phase 4 — Dues tracking ✅ (mostly)
 Went further than originally scoped — this one's essentially done, not just started:
