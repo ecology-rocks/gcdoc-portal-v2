@@ -2,8 +2,22 @@ import { defineStore } from 'pinia'
 import { db, storage } from '@/firebase'
 import { useAuthStore } from '@/stores/authStore'
 // ADDED: onSnapshot
-import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, onSnapshot, where, writeBatch } from 'firebase/firestore'
+import { collection, addDoc, getDocs, query, orderBy, doc, updateDoc, onSnapshot, where, writeBatch, limit } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+
+// Sheet codes are "<FY>-<4 random digits>" (e.g. 27-4821 for FY27, Oct 2026 - Sep 2027), checked so they
+// never repeat. Random rather than sequential on purpose - the owner would rather not see a running count.
+// The code is written on the paper sheet, so it's fixed at upload and never changed. Sheets uploaded
+// before this keep their old plain 4-digit codes, which can repeat.
+async function uniqueSheetCode() {
+  const now = new Date()
+  const fyEndYear = now.getMonth() >= 9 ? now.getFullYear() + 1 : now.getFullYear()
+  for (;;) {
+    const code = `${String(fyEndYear).slice(-2)}-${Math.floor(1000 + Math.random() * 9000)}`
+    const snap = await getDocs(query(collection(db, 'sheets'), where('shortId', '==', code), limit(1)))
+    if (snap.empty) return code
+  }
+}
 
 export const useSheetsStore = defineStore('sheets', {
   state: () => ({
@@ -58,7 +72,7 @@ export const useSheetsStore = defineStore('sheets', {
     },
 
     async uploadSheet(file, uploaderEmail) {
-       const shortId = Math.floor(1000 + Math.random() * 9000).toString()
+       const shortId = await uniqueSheetCode()
        const filename = `sheets/${Date.now()}_${shortId}_${file.name}`
        const fileRef = storageRef(storage, filename)
        const uploadResult = await uploadBytes(fileRef, file)
