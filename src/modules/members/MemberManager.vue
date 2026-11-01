@@ -156,6 +156,12 @@ const uniqueTypes = computed(() => {
 // Joined is a year, stored as a number or a string depending on how the member was added
 const joinYearOf = (m) => String(m.Joined ?? '').trim()
 
+// "City, ST 12345" — skips whichever parts are blank so partial addresses don't show stray commas
+const cityLineOf = (m) => {
+    const stateZip = [m.State, m.Zip].map(s => String(s ?? '').trim()).filter(Boolean).join(' ')
+    return [String(m.City ?? '').trim(), stateZip].filter(Boolean).join(', ')
+}
+
 const filteredMembers = computed(() => {
     let list = store.members
     
@@ -433,6 +439,10 @@ const copyAllEmails = async () => {
                         <span class="copy-icon">{{ copiedEmail === m.Email ? 'Copied!' : '📋' }}</span>
                     </button>
                     <div class="secondary-text">{{ m.Phone1 }}</div>
+                    <div v-if="m.Address || cityLineOf(m)" class="secondary-text address-text">
+                        <div v-if="m.Address">{{ m.Address }}</div>
+                        <div v-if="cityLineOf(m)">{{ cityLineOf(m) }}</div>
+                    </div>
                     <div class="hours-text">FY Hours: <strong>{{ getFYHours(m.Email) }}</strong></div>
                     <div class="hours-text">Last Year FY Hours: <strong>{{ getLastYearFYHours(m.Email) }}</strong></div>
                     <div v-if="joinYearOf(m)" class="secondary-text">Joined: {{ joinYearOf(m) }}</div>
@@ -868,6 +878,8 @@ const copyAllEmails = async () => {
   margin-bottom: 1rem;
   flex: 1;
 }
+
+.address-text { margin: 0.25rem 0; line-height: 1.35; }
 
 /* --- Updated Card Footer --- */
 .card-footer {

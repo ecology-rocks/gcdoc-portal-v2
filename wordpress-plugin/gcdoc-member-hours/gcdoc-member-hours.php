@@ -32,6 +32,9 @@ define('GCDOC_HOURS_ENTRY_URL', 'https://gcdoc.com/member-hours-entry/');
 // Where members whose dues are pending on a missing waiver go to sign it
 define('GCDOC_WAIVER_URL', 'https://gcdoc.com/waiver-of-liability');
 define('GCDOC_LOGIN_URL', 'https://gcdoc.com/membership-login');
+// Dues box at the top of [gcdoc_hours] - on during dues season, off once dues close.
+// ([gcdoc_dues_owed] is unaffected.)
+define('GCDOC_HOURS_SHOW_DUES', false);
 
 function gcdoc_login_prompt($message) {
     // Send the user back to whatever page they were actually trying to reach (e.g. the dues page)
@@ -311,7 +314,7 @@ function gcdoc_member_hours_shortcode() {
     }
     ?>
     <div class="gcdoc-hours-report">
-        <?php if ($dues !== null) : ?>
+        <?php if (GCDOC_HOURS_SHOW_DUES && $dues !== null) : ?>
             <div class="gcdoc-dues-summary gcdoc-dues-owed <?php echo esc_attr($dues_state_class); ?>">
                 <h3>Dues (<?php echo esc_html($report['duesFiscalYear'] ?? 'Current Year'); ?>)</h3>
                 <?php if (!empty($report['dues2026Paid'])) : ?>
